@@ -1,7 +1,7 @@
 #ifndef JOURNALD__HASH__H__
 #define JOURNALD__HASH__H__
 
-#include "crc64.h"
+#include <crc/crc64.h>
 #define HASH_SIZE (sizeof(uint64))
 typedef uint64 HASH_CTX;
 

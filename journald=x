@@ -5,7 +5,7 @@ writer-fdatasync.o
 writer-mmap.o
 writer-open-direct.o
 writer-open-sync.o
-crc64.o
+-lbg-crc
 -lbg-cli
 -lbg-msg
 -lbg-str
