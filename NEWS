@@ -1,4 +1,16 @@
 -------------------------------------------------------------------------------
+Changes in version 0.3
+
+- Modified the core logic to use only a single file (making it suitable
+  for raw devices).  Wraparound is handled by first sync'ing all
+  filesystems.
+
+- Modified the journal writing mechanism to use msync instead of
+  write+fdatasync.
+
+Development of this version has been sponsored by FutureQuest, Inc.
+OSSI@FutureQuest.net  http://www.FutureQuest.net/
+-------------------------------------------------------------------------------
 Changes in version 0.2
 
 New Features:

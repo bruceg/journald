@@ -47,18 +47,18 @@ static unsigned opt_quiet = 0;
 static unsigned opt_verbose = 0;
 static unsigned opt_delete = 1;
 static const char* opt_socket;
+static const char* opt_filename;
 static uid_t opt_uid = -1;
 static gid_t opt_gid = -1;
 static mode_t opt_umask = 0;
 static int opt_backlog = 128;
 
 int opt_twopass = 0;
-unsigned long opt_maxsize = 1000000;
 unsigned opt_connections = 10;
 connection* connections;
 
 static const char* usage_str =
-"usage: %s [options] socket journal-dir\n"
+"usage: %s [options] socket journal-file\n"
 "  -u UID       Change user id to UID after creating socket.\n"
 "  -g GID       Change group id to GID after creating socket.\n"
 "  -U           Same as '-u $UID -g $GID'.\n"
@@ -70,7 +70,6 @@ static const char* usage_str =
 "  -1           Single-pass transaction commit (default).\n"
 "  -2           Re-write the type flag to commit a transaction.\n"
 "               (slower, but guarantees consistency)\n"
-"  -x N         Maximum journal file size, in bytes. (default 1000000)\n"
 "  -t N         Pause synchronization by N us. (default 10ms)\n";
 
 static void usage(const char* message)
@@ -135,14 +134,10 @@ static void parse_options(int argc, char* argv[])
   int opt;
   char* ptr;
   argv0 = argv[0];
-  while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:t:x:")) != EOF) {
+  while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:t:")) != EOF) {
     switch(opt) {
     case '1': opt_twopass = 0; break;
     case '2': opt_twopass = 1; break;
-    case 'x':
-      opt_maxsize = strtoul(optarg, &ptr, 10);
-      if (*ptr != 0) usage("Invalid maximum size.");
-      break;
     case 't':
       opt_timeout = strtol(optarg, &ptr, 10);
       if (*ptr != 0 || opt_timeout >= 1000000) usage("Invalid timeout.");
@@ -178,7 +173,7 @@ static void parse_options(int argc, char* argv[])
   argv += optind;
   if (argc != 2) usage(0);
   opt_socket = argv[0];
-  if (chdir(argv[1])) usage("Could not change directory.");
+  opt_filename = argv[1];
 }
 
 static void nonblock(int fd)
@@ -364,8 +359,9 @@ int main(int argc, char* argv[])
   signal(SIGHUP, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
   signal(SIGALRM, SIG_IGN);
-  if (!open_journal()) return 1;
   s = make_socket();
+  if (!open_journal(opt_filename))
+    usage("Could not write journal file.");
   log_status();
   for(;;)
     do_select(s);
