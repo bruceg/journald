@@ -8,6 +8,7 @@ Source: http://em.ca/~bruceg/@PACKAGE@/@PACKAGE@-@VERSION@.tar.gz
 BuildRoot: %{_tmppath}/@PACKAGE@-buildroot
 URL: http://em.ca/~bruceg/@PACKAGE@/
 Packager: Bruce Guenter <bruceg@em.ca>
+Requires: bglibs >= 1.010
 
 %description
 Journald is a user-space standalone generic journalling daemon.  It

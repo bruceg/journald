@@ -6,7 +6,7 @@ writer-mmap.o
 writer-open-direct.o
 writer-open-sync.o
 crc64.o
--lcli/cli
--lmsg/msg
--lstr/str
--liobuf/iobuf
+-lbg-cli
+-lbg-msg
+-lbg-str
+-lbg-iobuf
