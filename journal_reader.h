@@ -6,6 +6,7 @@ extern const char program[];
 struct stream
 {
   unsigned long strnum;
+  unsigned long recnum;
   unsigned long offset;
   unsigned long start_offset;
   unsigned long identlen;
