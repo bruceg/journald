@@ -31,7 +31,11 @@ Record Format:
 - A 128-bit MD4 hash on all the data from the non-zero value of the
   record type flag to the last byte of the record data.
 
-- All record types (except "A") may contain data.
+Stream Information Data Format:
+- Current stream offset
+- Identifier string
+
+- All record types may contain data.  Data for "A" records is ignored.
 
 - The first record in a transaction is initially marked with a NUL
   record type, which is restored after the rest of the data is sync'ed
@@ -55,9 +59,7 @@ Record Format:
 - All strings are prefixed with their length
 
 - The stream information record always has a record number of zero, and
-  do not affect the record numbering of other records.  It contains the
-  current offset for that stream followed by the identifier string
-  supplied by the client.
+  do not affect the record numbering of other records.
 
 - The stream information record for a given stream will always precede
   any data records for that stream within an individual journal file.
