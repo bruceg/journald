@@ -194,7 +194,6 @@ void handle_connection(connection* con)
     con->fd = 0;
   }
 }
- 
 
 void accept_connection(int s)
 {
