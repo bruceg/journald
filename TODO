@@ -1,6 +1,3 @@
-- Modify journald_output.c and journal_read.c to handle the new record
-  ID format.
-
 - Modify journal_read to verify that the value of recnum is sequential.
 
 - Modify journal_read to write data from transactions to (invisible)
