@@ -233,13 +233,18 @@ void read_journal(const char* filename)
 #undef FAIL
 #define FAIL(MSG) do{fprintf(stderr,"%s: " MSG ", skipping\n", program, filename);return;}while(0)
   stream* h;
-  char header[8+4+4+4];
+  char header[8+4+4+4+4+HASH_SIZE];
+  char hashbuf[HASH_SIZE];
+  HASH_CTX hash;
   ibuf in;
 
   if (!ibuf_open(&in, filename, 0)) FAIL("Could not open '%s'");
-  // FIXME: verify hash on first page
+
+  /* Read/validate header record */
+  hash_init(&hash);
   if (!ibuf_read(&in, header, sizeof header))
     FAIL("Could not read header from '%s'");
+  hash_update(&hash, header, sizeof header - HASH_SIZE);
   if (memcmp(header, "journald", 8) != 0)
     FAIL("'%s' is not a journald file");
   if (bytes2ulong(header+8) != 2)
@@ -247,6 +252,12 @@ void read_journal(const char* filename)
   if ((pagesize = bytes2ulong(header+12)) == 0)
     FAIL("'%s' has zero page size");
   global_recnum = bytes2ulong(header+16);
+  if (bytes2ulong(header+20) != 0)
+    FAIL("'%s' has non-zero options length");
+  hash_finish(&hash, hashbuf);
+  if (memcmp(header + 24, hashbuf, HASH_SIZE) != 0)
+    FAIL("'%s' has invalid check code");
+  
   if (!skip_page(&in)) FAIL("Could not skip first page of '%s'");
   MSG1("Start file '%s'", filename);
   while (read_transaction(&in))
