@@ -133,7 +133,7 @@ static int write_record_raw(char type,
   
   if (opt_twopass && !saved_type) {
     saved_type = type;
-    type = 0;
+    hdr[0] = 0;
   }
 
   reclen = sizeof hdr + buflen + HASH_SIZE;
