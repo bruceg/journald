@@ -147,26 +147,26 @@ static void open_connection(connection* con, int fd)
   }
 }
 
-void die(const char* msg)
+void die(const char* s)
 {
-  error2sys(msg, " failed");
+  error2sys(s, " failed");
   unlink(opt_socket);
   exit(1);
 }
 
-static void use_uid(const char* str)
+static void use_uid(const char* s)
 {
   char* ptr;
-  if (!str) usage(1, "UID not found in environment");
-  opt_uid = strtoul(str, &ptr, 10);
+  if (s == 0) usage(1, "UID not found in environment");
+  opt_uid = strtoul(s, &ptr, 10);
   if (*ptr != 0) usage(1, "Invalid UID number");
 }
 
-static void use_gid(const char* str)
+static void use_gid(const char* s)
 {
   char* ptr;
-  if (!str) usage(1, "GID not found in environment");
-  opt_gid = strtoul(str, &ptr, 10);
+  if (s == 0) usage(1, "GID not found in environment");
+  opt_gid = strtoul(s, &ptr, 10);
   if (*ptr != 0) usage(1, "Invalid GID number");
 }
 

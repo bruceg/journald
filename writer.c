@@ -161,11 +161,11 @@ static int check_rotate(uint32 buflen)
   return 1;
 }
 
-int write_record(connection* con, int final, int abort)
+int write_record(connection* con, int final, int do_abort)
 {
   char type;
   
-  if (abort) {
+  if (do_abort) {
     con->buf_length = 0;
     if (!con->total) return 1;
     type = RECORD_ABORT;

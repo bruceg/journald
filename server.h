@@ -11,7 +11,7 @@ struct connection
   int fd;
   int mode;
   int state;
-  int count;
+  uint32 count;
   uint32 length;
   uint32 ident_len;
   uint32 buf_length;
@@ -32,7 +32,7 @@ extern unsigned opt_connections;
 extern void die(const char* msg);
 extern void handle_data(connection* con, char* data, uint32 size);
 extern int open_journal(const char* filename);
-extern int write_record(connection* con, int final, int abort);
+extern int write_record(connection* con, int final, int do_abort);
 extern int sync_records(void);
 extern int rotate_journal(void);
 
