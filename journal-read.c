@@ -25,7 +25,7 @@
 
 #include <msg/msg.h>
 
-#include "journal_reader.h"
+#include "reader.h"
 
 static int opt_argc;
 static char** opt_argv;

@@ -1,4 +1,4 @@
-/* journal_reader.c - Library for dumping the contents of journal directories.
+/* reader.c - Library for dumping the contents of journal directories.
    Copyright (C) 2000,2002 Bruce Guenter
 
    This program is free software; you can redistribute it and/or modify
@@ -28,7 +28,7 @@
 
 #include "flags.h"
 #include "hash.h"
-#include "journal_reader.h"
+#include "reader.h"
 
 #if JOURNAL_DEBUG
 #define MSG0(S) do{ printf("%s: %s\n", program, S); }while(0)

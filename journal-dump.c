@@ -20,7 +20,7 @@
 
 #include <iobuf/iobuf.h>
 
-#include "journal_reader.h"
+#include "reader.h"
 
 const char program[] = "journal-dump";
 
