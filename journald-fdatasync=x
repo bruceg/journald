@@ -1,0 +1,5 @@
+journald.o
+journal_input.o
+journal_output.o
+writer-fdatasync.o
+crc64.o

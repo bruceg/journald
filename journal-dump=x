@@ -1,0 +1,5 @@
+reader.o
+crc64.o
+-lmsg/msg
+-liobuf/iobuf
+-lstr/str
