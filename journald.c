@@ -174,14 +174,15 @@ void handle_connection(connection* con)
       handle_data(con, 0, 0);
       break;
     }
-    if (rd == -1)
-      die("read");
+    if (rd == -1) {
+      write_record(con, 0, 1);
+      return;
+    }
     handle_data(con, buf, rd);
   }
-  if (sync_records()) con->ok = 0;
+  if (!sync_records()) con->ok = 0;
   buf[0] = con->ok;
-  if(write(con->fd, buf, 1) != 1)
-    die("write");
+  write(con->fd, buf, 1);
 }
 
 void accept_connection(int s)
@@ -198,14 +199,8 @@ void accept_connection(int s)
   log_status();
   log_connection_start(pid);
 
+  memset(&con, 0, sizeof con);
   con.fd = fd;
-  con.mode = 0;
-  con.state = 0;
-  con.length = 0;
-  con.ident_len = 0;
-  con.buf_length = 0;
-  con.buf_offset = 0;
-  con.ok = 0;
   
   handle_connection(&con);
   
@@ -231,7 +226,7 @@ int main(int argc, char* argv[])
   signal(SIGHUP, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
   signal(SIGALRM, SIG_IGN);
-  if (open_journal(opt_journal) == -1) return 1;
+  if (!open_journal(opt_journal)) return 1;
   s = make_socket();
   log_status();
   for(;;) {
