@@ -19,7 +19,7 @@ File Header Format:
 Record Format:
 - Record type (single byte):
   NUL == end of journal, anything else means a potentially valid transaction
-  I == record ID
+  I == stream information
   O == start and end of the records for the given stream
   S == start of the records for the given stream
   E == end of the records for the given stream
@@ -55,14 +55,13 @@ Record Format:
 
 - All strings are prefixed with their length
 
-- Record IDs are a string supplied by the client.
+- The stream information record always has a record number of zero, and
+  do not affect the record numbering of other records.  It contains the
+  current offset for that stream followed by the identifier string
+  supplied by the client.
 
-- The record ID record always has a record number of zero, and do not
-  affect the record numbering of other records.  It contains the current
-  offset for that stream followed by the identifier string.
-
-- The record ID record for a given stream will always precede any data
-  records for that stream within an individual journal file.
+- The stream information record for a given stream will always precede
+  any data records for that stream within an individual journal file.
 
 - The following "magic" entries can be used to identify journald files:
 0	string		journald	Journald file
