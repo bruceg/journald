@@ -3,12 +3,14 @@ Changes in version 0.2
 
 New Features:
 - journal_read now spawns seperate processes to handle each
-  transaction's data stream.
+  transaction's data stream after the stream is completed.
 
 Internal Changes:
 - Modified file format to better support extraction of the seperate
   streams of data, and to avoid repeating the (potentially long) stream
   ID string in each record.
+- Optimized the daemon input handler to avoid outputting an extra empty
+  end record if the input ends on a CBUFSIZE boundary.
 
 Bug Fixes:
 - Fixed handling of partial (non-multiples of 64 bytes) blocks in MD4.
