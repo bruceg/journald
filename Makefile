@@ -56,3 +56,5 @@ journal_read.o: journal_read.c journald_server.h hash.h
 testclient.o: testclient.c journald_client.h
 md4.o: md4.c md4.h
 
+clean:
+	$(RM) *.o *.a $(PROGS)
