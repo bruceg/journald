@@ -3,7 +3,8 @@ Socket protocol:
 - Client sends a non-zero length record ID string.
 - Client sends a series of non-zero-length strings.
 - Client sends a zero-length string.
-- Server sends an acknowledgement code and closes the socket.
+- Server sends an single acknowledgement byte and closes the socket.
+  That byte will be non-zero for success, or zero on error.
 
 Notes:
 
