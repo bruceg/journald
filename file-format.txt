@@ -19,17 +19,15 @@ File Header Format:
 Record Format:
 - Record type (single byte):
   NUL == end of journal, anything else means a potentially valid transaction
-  O == start and end of the records for the given ID
-  S == start of the records for the given ID
-  E == end of the records for the given ID
-  C == continued data for the given ID
+  I == record ID
+  O == start and end of the records for the given stream
+  S == start of the records for the given stream
+  E == end of the records for the given stream
+  C == continued data for the given stream
   A == abort record
 - Stream number
 - Record number
-- Record offset
-- Record ID length
 - Record data length
-- Record ID
 - Record data
 - A 128-bit MD4 hash on all the data from the non-zero value of the
   record type flag to the last byte of the record data.
@@ -48,9 +46,9 @@ Record Format:
   new stream.
 
 - Possible sequences of record types:
-  O
-  S C* E
-  S C* A
+  I O
+  I S C* E
+  I S C* A
 
 - Unless otherwise noted, all the above numbers are represented as a
   4-byte binary value, MSB first.
@@ -59,7 +57,12 @@ Record Format:
 
 - Record IDs are a string supplied by the client.
 
-- The same Record ID may appear multiple times in the same transaction.
+- The record ID record always has a record number of zero, and do not
+  affect the record numbering of other records.  It contains the current
+  offset for that stream followed by the identifier string.
+
+- The record ID record for a given stream will always precede any data
+  records for that stream within an individual journal file.
 
 - The following "magic" entries can be used to identify journald files:
 0	string		journald	Journald file
