@@ -24,9 +24,8 @@ installdir = $(install) -d
 installsrc = $(install) -m 444
 
 PROGS = journald journal_read # testclient
-LIBS = journald.a
 
-all: $(PROGS) $(LIBS)
+all: $(PROGS) journald.a
 
 journald: journald.o journal_input.o journal_output.o md4.o
 	$(LD) $(LDFLAGS) journald.o journal_input.o journal_output.o md4.o \
@@ -43,7 +42,7 @@ install: all
 	$(installbin) $(PROGS) $(install_prefix)$(bindir)
 
 	$(installdir) $(install_prefix)$(libdir)
-	$(installsrc) $(LIBS) $(install_prefix)$(libdir)
+	$(installsrc) journald.a $(install_prefix)$(libdir)
 
 journald.a: journald_client.o
 	$(AR) rc $@ journald_client.o
