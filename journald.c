@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -151,11 +152,21 @@ void parse_options(int argc, char* argv[])
   if (chdir(argv[1])) usage("Could not change directory.");
 }
 
+static void nonblock(int fd)
+{
+  int flags;
+  if ((flags = fcntl(fd, F_GETFL)) == -1) die ("fcntl");
+  flags |= O_NONBLOCK;
+  if (fcntl(fd, F_SETFL, flags) == -1) die("fcntl");
+}
+
 int make_socket()
 {
   struct sockaddr_un* saddr;
   int s;
-  mode_t old_umask = umask(opt_umask);
+  mode_t old_umask;
+  
+  old_umask = umask(opt_umask);
   saddr = (struct sockaddr_un*)malloc(sizeof(struct sockaddr_un) +
 				      strlen(opt_socket) + 1);
   saddr->sun_family = AF_UNIX;
@@ -168,6 +179,7 @@ int make_socket()
   if (opt_gid != (gid_t)-1 && setgid(opt_gid) == -1) die("setgid");
   if (opt_uid != (uid_t)-1 && setuid(opt_uid) == -1) die("setuid");
   umask(old_umask);
+  nonblock(s);
   return s;
 }
 
@@ -205,6 +217,7 @@ void accept_connection(int s)
     // All the listed error return values are not possible except for
     // buggy code, so just try again if accept fails.
   } while(fd < 0);
+  nonblock(fd);
   ++connection_count;
   log_status();
 
