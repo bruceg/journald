@@ -107,10 +107,10 @@ int main(int argc, char* argv[])
 {
   int i;
   if (argc < 3) usage("Too few command-line arguments");
-  opt_argc = argc - 1;
+  opt_argc = argc - 2;
   opt_argv = malloc(sizeof(char*) * (opt_argc+3));
   for (i = 0; i < opt_argc; i++)
-    opt_argv[i] = argv[i+1];
+    opt_argv[i] = argv[i+2];
   read_journal(argv[1]);
   return 0;
 }
