@@ -29,7 +29,7 @@
 #include "hash.h"
 #include "journal_reader.h"
 
-#if DEBUG_MSGS
+#if JOURNAL_DEBUG
 #define MSG0(S) do{ printf("%s: %s\n", program, S); }while(0)
 #define MSG1(S,A) do{ printf("%s: " S "\n", program, A); }while(0)
 #define MSG2(S,A,B) do{ printf("%s: " S "\n", program, A, B); }while(0)
@@ -45,18 +45,20 @@ const int msg_show_pid = 0;
 
 static stream* streams;
 static unsigned long pagesize;
+static unsigned long global_recnum;
 
 static unsigned long bytes2ulong(const unsigned char bytes[4])
 {
   return (bytes[0]<<24) | (bytes[1]<<16) | (bytes[2]<<8) | bytes[3];
 }
 
-static stream* new_stream(unsigned long strnum, unsigned long offset,
-			  char* id, unsigned long idlen)
+static stream* new_stream(unsigned long strnum, unsigned long recnum,
+			  unsigned long offset, char* id, unsigned long idlen)
 {
   stream* n;
   n = malloc(sizeof(stream));
   n->strnum = strnum;
+  n->recnum = recnum;
   n->offset = n->start_offset = offset;
   n->identlen = idlen;
   n->ident = malloc(idlen+1);
@@ -87,6 +89,7 @@ static void del_stream(stream* find)
 	prev->next = ptr->next;
       else
 	streams = ptr->next;
+      free(ptr->ident);
       free(ptr);
       return;
     }
@@ -106,12 +109,22 @@ static char* alloc_buffer(unsigned long size)
 }
 
 static void handle_record(char type, unsigned long strnum,
-			  unsigned long reclen, const char* buf)
+			  unsigned long recnum, unsigned long reclen,
+			  const char* buf)
 {
   stream* h;
   unsigned long offset;
   
-  h = find_stream(strnum);
+  if ((h = find_stream(strnum)) != 0) {
+    if (recnum != h->recnum) {
+      MSG3("Bad record number for stream #%lu, dropping stream\n"
+	   "  Offset was %lu, should be %lu\n", h->strnum,
+	   recnum, h->recnum);
+      abort_stream(h);
+      del_stream(h);
+      return;
+    }
+  }
   if (type == 'A') {
     if (h) {
       abort_stream(h);
@@ -121,6 +134,7 @@ static void handle_record(char type, unsigned long strnum,
   else if (type == 'I') {
     offset = bytes2ulong(buf);
     if (h) {
+      // FIXME: is it possible for the stream to already exist?
       if (offset != h->offset) {
 	MSG3("Bad offset value for stream #%lu, dropping stream\n"
 	     "  Offset was %lu, should be %lu\n", h->strnum,
@@ -130,8 +144,9 @@ static void handle_record(char type, unsigned long strnum,
       }
     }
     else {
-      MSG2("Start stream #%lu at offset %lu", strnum, offset);
-      new_stream(strnum, offset, (char*)buf+4, reclen-4);
+      MSG3("Start stream #%lu at record %lu offset %lu",
+	   strnum, recnum, offset);
+      new_stream(strnum, recnum, offset, (char*)buf+4, reclen-4);
     }
   }
   else {
@@ -139,6 +154,7 @@ static void handle_record(char type, unsigned long strnum,
       if (h) {
 	append_stream(h, buf, reclen);
 	h->offset += reclen;
+	h->recnum ++;
       }
       else
 	MSG1("Data record for nonexistant stream #%lu", strnum);
@@ -159,11 +175,12 @@ static int read_record(unsigned char type, ibuf* in)
 {
 #undef FAIL
 #define FAIL(MSG) do{ error1(MSG); return 0; }while(0)
-  static unsigned char header[1+4+4+4];
+  static unsigned char header[1+4+4+4+4];
   static char hcmp[HASH_SIZE];
   static HASH_CTX hash;
   unsigned long strnum;
   unsigned long recnum;
+  unsigned long grecnum;
   unsigned long reclen;
   unsigned char* hdrptr;
   char* buf;
@@ -171,6 +188,9 @@ static int read_record(unsigned char type, ibuf* in)
   if (!ibuf_read(in, header+1, sizeof header-1)) return 0;
   hdrptr = header;
   *hdrptr++ = type;
+  grecnum = bytes2ulong(hdrptr); hdrptr += 4;
+  if (grecnum != global_recnum)
+    FAIL("Global record number mismatch.");
   strnum = bytes2ulong(hdrptr); hdrptr += 4;
   recnum = bytes2ulong(hdrptr); hdrptr += 4;
   reclen = bytes2ulong(hdrptr);
@@ -184,7 +204,8 @@ static int read_record(unsigned char type, ibuf* in)
   if (memcmp(buf+reclen, hcmp, HASH_SIZE))
     FAIL("Record data was corrupted.");
 
-  handle_record(type, strnum, reclen, buf);
+  handle_record(type, strnum, recnum, reclen, buf);
+  global_recnum++;
   return 1;
 }
 
@@ -201,7 +222,7 @@ static int read_transaction(ibuf* in)
   if (!ibuf_getc(in, &type)) return 0;
   if (type == 0) return 0;
   do {
-    read_record(type, in);
+    if (!read_record(type, in)) return 0;
     if (!ibuf_getc(in, &type)) return 0;
   } while (type != 0);
   return skip_page(in);
@@ -212,10 +233,11 @@ void read_journal(const char* filename)
 #undef FAIL
 #define FAIL(MSG) do{fprintf(stderr,"%s: " MSG ", skipping\n", program, filename);return;}while(0)
   stream* h;
-  char header[8+4+4];
+  char header[8+4+4+4];
   ibuf in;
 
   if (!ibuf_open(&in, filename, 0)) FAIL("Could not open '%s'");
+  // FIXME: verify hash on first page
   if (!ibuf_read(&in, header, sizeof header))
     FAIL("Could not read header from '%s'");
   if (memcmp(header, "journald", 8) != 0)
@@ -224,6 +246,7 @@ void read_journal(const char* filename)
     FAIL("'%s' is not a version 2 journald file");
   if ((pagesize = bytes2ulong(header+12)) == 0)
     FAIL("'%s' has zero page size");
+  global_recnum = bytes2ulong(header+16);
   if (!skip_page(&in)) FAIL("Could not skip first page of '%s'");
   MSG1("Start file '%s'", filename);
   while (read_transaction(&in))
