@@ -91,7 +91,8 @@ static struct dirent* read_directory(void)
 struct handler
 {
   unsigned long stream;
-  int pipefd;
+  unsigned long offset;
+  int fd;
   pid_t pid;
   struct handler* next;
 };
@@ -138,41 +139,35 @@ static handler* start_handler(unsigned long offset,
   close(pipefds[0]);
   n = malloc(sizeof(handler));
   n->pid = pid;
-  n->pipefd = pipefds[1];
+  n->fd = pipefds[1];
+  n->offset = offset;
   n->next = 0;
   return n;
 }
 
 static handler* handlers;
 
-static handler* find_handler(unsigned long stream, unsigned long offset,
-			     const char* id, unsigned long idlen)
+static handler* find_handler(unsigned long stream)
 {
   handler* ptr;
   for (ptr = handlers; ptr; ptr = ptr->next)
     if (ptr->stream == stream)
       break;
-  if (!ptr) {
-    ptr = start_handler(offset, (char*)id, idlen);
-    ptr->stream = stream;
-    ptr->next = handlers;
-    handlers = ptr;
-  }
   return ptr;
 }
 
-static void end_handler(unsigned long stream)
+static void end_handler(handler* find)
 {
   handler* prev;
   handler* ptr;
   int status;
   for (prev = 0, ptr = handlers; ptr; prev = ptr, ptr = ptr->next) {
-    if (ptr->stream == stream) {
+    if (ptr == find) {
       if (prev)
 	prev->next = ptr->next;
       else
 	handlers = ptr->next;
-      close(ptr->pipefd);
+      close(ptr->fd);
       waitpid(ptr->pid, &status, WUNTRACED);
       free(ptr);
       return;
@@ -182,15 +177,14 @@ static void end_handler(unsigned long stream)
 
 static int read_record(int in)
 {
-  static unsigned char header[1+4+4+4+4+4];
-  static char buf[IDENTSIZE+CBUFSIZE+HASH_SIZE];
+  static unsigned char header[1+4+4+4];
+  static char buf[CBUFSIZE+HASH_SIZE];
   static char hcmp[HASH_SIZE];
   static HASH_CTX hash;
   char type;
   unsigned long strnum;
   unsigned long recnum;
-  unsigned long recoff;
-  unsigned long idlen;
+  unsigned long offset;
   unsigned long reclen;
   const unsigned char* hdrptr;
   handler* h;
@@ -200,20 +194,57 @@ static int read_record(int in)
   if ((type = *hdrptr++) == 0) return 0;
   strnum = bytes2ulong(hdrptr); hdrptr += 4;
   recnum = bytes2ulong(hdrptr); hdrptr += 4;
-  recoff = bytes2ulong(hdrptr); hdrptr += 4;
-  idlen = bytes2ulong(hdrptr); hdrptr += 4;
   reclen = bytes2ulong(hdrptr);
-  if (idlen > IDENTSIZE || reclen > CBUFSIZE) return 0;
-  if (read(in, buf, idlen+reclen+HASH_SIZE) != idlen+reclen+HASH_SIZE)
+  if (reclen > CBUFSIZE) return 0;
+  if (read(in, buf, reclen+HASH_SIZE) != reclen+HASH_SIZE)
     return 0;
   hash_init(&hash);
   hash_update(&hash, header, sizeof header);
-  hash_update(&hash, buf, idlen+reclen);
+  hash_update(&hash, buf, reclen);
   hash_finish(&hash, hcmp);
-  if (memcmp(buf+idlen+reclen, hcmp, HASH_SIZE)) return 0;
-  h = find_handler(strnum, recoff, buf, idlen);
-  if (write(h->pipefd, buf+idlen, reclen) != reclen) die("write to child");
-  if (type == 'O' || type == 'E') end_handler(strnum);
+  if (memcmp(buf+reclen, hcmp, HASH_SIZE)) return 0;
+
+  h = find_handler(strnum);
+  if (type == 'A') {
+    if (h)
+      end_handler(h);
+  }
+  else if (type == 'I') {
+    offset = bytes2ulong(buf);
+    if (h) {
+      if (offset != h->offset) {
+	printf("journal_read: "
+	       "Bad offset value for stream #%lu, dropping\n"
+	       "  Offset was %lu, should be %lu\n", h->stream,
+	       offset, h->offset);
+	end_handler(h);
+      }
+    }
+    else {
+      h = start_handler(offset, (char*)buf+4, reclen-4);
+      h->stream = strnum;
+      h->next = handlers;
+      handlers = h;
+    }
+  }
+  else {
+    if (type == 'O' || type == 'D' || type == 'E') {
+      if (h) {
+	if (write(h->fd, buf, reclen) != reclen) die("write to child");
+	h->offset += reclen;
+      }
+      else
+	printf("journal_read: "
+	       "Data record for nonexistant stream #%lu\n", strnum);
+    }
+    if (type == 'O' || type == 'E') {
+      if (h)
+	end_handler(h);
+      else
+	printf("journal_read: "
+	       "End record for nonexistant stream #%lu\n", strnum);
+    }
+  }
   return 1;
 }
 
@@ -227,8 +258,8 @@ static void read_journal(const char* filename)
   if (read(in, header, sizeof header) != sizeof header)
     FAIL("Could not read header from '%s'");
   if (memcmp(header, "journald", 8)) FAIL("'%s' is not a journald file");
-  if (bytes2ulong(header+8) != 0)
-    FAIL("'%s' is not a version 0 journald file");
+  if (bytes2ulong(header+8) != 1)
+    FAIL("'%s' is not a version 1 journald file");
   printf("File:%s\n", filename);
   while (read_record(in))
     ;
