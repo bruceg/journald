@@ -20,7 +20,8 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include "journald_client.h"
+
+#include "client.h"
 
 #ifndef SUN_LEN
 /* Evaluate to actual length of the `sockaddr_un' structure.  */
@@ -37,7 +38,7 @@ static int jflush(journald_client* j)
   ptr = j->buf;
   while (length > 0) {
     wr = write(j->fd, ptr, length);
-    if (wr == -1) return 0;
+    if (wr == (unsigned long)-1) return 0;
     length -= wr;
     ptr += wr;
   }
