@@ -1,9 +1,3 @@
-- Modify journal-read to mark the start and end of files, and print
-  record summaries to stdout in an optional verbose mode.
-
-- Modify journal-read to remove journal files when all streams
-  referencing that file are closed (optional?).
-
 - Modify the file format to align transaction starts on block boundaries.
 
 - Modify journal-read to wait for new records to be output to the
@@ -17,4 +11,7 @@
   connections opened.
 
 - Expand on the design decision documentation.
+
+- Modify journal-read to mark the start and end of files, and print
+  record summaries to stdout in an optional verbose mode.
 
