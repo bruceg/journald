@@ -1,10 +1,31 @@
+- Restore operation of two-pass mode.
+
+- Set up a conf-writer switch to build a single journald binary from the
+  three possibilities.
+
+? Automate the conf-writer switch?
+
+- Benchmark which journald really works fastest, if there's any difference.
+  - fdatasync seems fastest, then mmap, then open-sync
+
+- Fix reader and writer to handle option flags.
+
+- Rewrite file format documentation in HTML.
+
+? Modify the file format to add timestamp and transaction index to
+  records?
+
+- On interrupt, journald should wait for connections to close before
+  exiting, and then close (no rotate needed).
+
+- Figure out how to rotate the journal at the *END* of syncing a
+  transaction instead of at the beginning.
+
 - Clean up the file format and documentation.
 
-- Modify all the reader programs to deal with new file format.
+- Write journal-dump, producing a low-level data dump.
 
-- Modify the file format to align transaction starts on block
-  boundaries, to avoid read-modify-write cycles on partial blocks.
-  - Use st_blksize from fstat to determine block size to use.
+- Modify all the reader programs to deal with new file format.
 
 - Modify journal-read to wait for new records to be output to the
   "current" file.
@@ -21,3 +42,4 @@
 - Modify journal-read to mark the start and end of files, and print
   record summaries to stdout in an optional verbose mode.
 
+- Modify the record format to add support for compression (zlib).
