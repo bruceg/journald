@@ -26,6 +26,7 @@
 #include <iobuf/iobuf.h>
 #include <msg/msg.h>
 
+#include "flags.h"
 #include "hash.h"
 #include "journal_reader.h"
 
@@ -108,13 +109,13 @@ static char* alloc_buffer(unsigned long size)
   return buf;
 }
 
-static void handle_record(char type, unsigned long strnum,
+static void handle_record(unsigned long typeflags, unsigned long strnum,
 			  unsigned long recnum, unsigned long reclen,
 			  const char* buf)
 {
   stream* h;
   unsigned long offset;
-  
+
   if ((h = find_stream(strnum)) != 0) {
     if (recnum != h->recnum) {
       MSG3("Bad record number for stream #%lu, dropping stream\n"
@@ -125,16 +126,16 @@ static void handle_record(char type, unsigned long strnum,
       return;
     }
   }
-  if (type == 'A') {
+  if (typeflags & RECORD_ABORT) {
     if (h) {
       abort_stream(h);
       del_stream(h);
     }
   }
-  else if (type == 'I') {
+  else if (typeflags & RECORD_INFO) {
     offset = bytes2ulong(buf);
     if (h)
-      MSG1("Ident record for existing stream %lu, ignoring", strnum);
+      MSG1("Info record for existing stream %lu, ignoring", strnum);
     else {
       MSG3("Start stream #%lu at record %lu offset %lu",
 	   strnum, recnum, offset);
@@ -142,7 +143,7 @@ static void handle_record(char type, unsigned long strnum,
     }
   }
   else {
-    if (type == 'O' || type == 'D' || type == 'E') {
+    if (typeflags & RECORD_DATA) {
       if (h) {
 	append_stream(h, buf, reclen);
 	h->offset += reclen;
@@ -151,7 +152,7 @@ static void handle_record(char type, unsigned long strnum,
       else
 	MSG1("Data record for nonexistant stream #%lu", strnum);
     }
-    if (type == 'O' || type == 'E') {
+    if (typeflags & RECORD_EOS) {
       if (h) {
 	MSG2("End stream #%lu at offset %lu", strnum, h->offset);
 	end_stream(h);
@@ -163,23 +164,22 @@ static void handle_record(char type, unsigned long strnum,
   }
 }
 
-static int read_record(unsigned char type, ibuf* in)
+static int read_record(unsigned char header[HEADER_SIZE], ibuf* in)
 {
 #undef FAIL
 #define FAIL(MSG) do{ error1(MSG); return 0; }while(0)
-  static unsigned char header[1+4+4+4+4];
   static char hcmp[HASH_SIZE];
   static HASH_CTX hash;
   unsigned long strnum;
   unsigned long recnum;
   unsigned long grecnum;
   unsigned long reclen;
+  unsigned long typeflags;
   unsigned char* hdrptr;
   char* buf;
-  
-  if (!ibuf_read(in, header+1, sizeof header-1)) return 0;
+
   hdrptr = header;
-  *hdrptr++ = type;
+  typeflags = bytes2ulong(hdrptr); hdrptr += 4;
   grecnum = bytes2ulong(hdrptr); hdrptr += 4;
   if (grecnum != global_recnum)
     FAIL("Global record number mismatch.");
@@ -190,13 +190,13 @@ static int read_record(unsigned char type, ibuf* in)
   if (!ibuf_read(in, buf, reclen+HASH_SIZE))
     FAIL("Could not read record data.");
   hash_init(&hash);
-  hash_update(&hash, header, sizeof header);
+  hash_update(&hash, header, HEADER_SIZE);
   hash_update(&hash, buf, reclen);
   hash_finish(&hash, hcmp);
   if (memcmp(buf+reclen, hcmp, HASH_SIZE))
     FAIL("Record data was corrupted.");
 
-  handle_record(type, strnum, recnum, reclen, buf);
+  handle_record(typeflags, strnum, recnum, reclen, buf);
   global_recnum++;
   return 1;
 }
@@ -210,13 +210,13 @@ static int skip_page(ibuf* in)
 
 static int read_transaction(ibuf* in)
 {
-  unsigned char type;
-  if (!ibuf_getc(in, &type)) return 0;
-  if (type == 0) return 0;
+  unsigned char header[HEADER_SIZE];
+  if (!ibuf_read(in, header, HEADER_SIZE)) return 0;
+  if (bytes2ulong(header) == 0) return 0;
   do {
-    if (!read_record(type, in)) return 0;
-    if (!ibuf_getc(in, &type)) return 0;
-  } while (type != 0);
+    if (!read_record(header, in)) return 0;
+    if (!ibuf_read(in, header, HEADER_SIZE)) return 0;
+  } while (bytes2ulong(header) != 0);
   return skip_page(in);
 }
 

@@ -25,22 +25,14 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include "flags.h"
 #include "hash.h"
 #include "journald_server.h"
 #include "writer.h"
 
-#define HEADER_SIZE (1+4+4+4+4)
-
 static unsigned long pageoff;
 
 static unsigned long global_recnum = 0;
-
-#define RECORD_EOJ    0
-#define RECORD_INFO  'I'
-#define RECORD_DATA  'D'
-#define RECORD_ONCE  'O'
-#define RECORD_END   'E'
-#define RECORD_ABORT 'A'
 
 static unsigned char* ulong2bytes(unsigned long v, unsigned char bytes[4])
 {
@@ -73,7 +65,7 @@ static int writer_write(const unsigned char* data, unsigned long bytes)
   return 1;
 }
 
-static int write_record_raw(char type,
+static int write_record_raw(unsigned type,
 			    unsigned long stream, unsigned long record,
 			    unsigned long buflen, const char* buf)
 {
@@ -83,11 +75,11 @@ static int write_record_raw(char type,
 
   hash_init(&hash);
   /* hash/write the header */
-  header[0] = type;
-  ulong2bytes(global_recnum, header+1);
-  ulong2bytes(stream, header+5);
-  ulong2bytes(record, header+9);
-  ulong2bytes(buflen, header+13);
+  ulong2bytes(type, header);
+  ulong2bytes(global_recnum, header+4);
+  ulong2bytes(stream, header+8);
+  ulong2bytes(record, header+12);
+  ulong2bytes(buflen, header+16);
   hash_update(&hash, header, HEADER_SIZE);
   if (!writer_write(header, HEADER_SIZE)) return 0;
 
@@ -137,7 +129,6 @@ static void make_file_header(void)
   p = ulong2bytes(2, p);
   p = ulong2bytes(writer_pagesize, p);
   p = ulong2bytes(global_recnum, p);
-  // FIXME: fill in real option flags, including concurrency
   p = ulong2bytes(0, p);
   hash_init(&hash);
   hash_update(&hash, writer_pagebuf, p - writer_pagebuf);
@@ -187,8 +178,13 @@ int write_record(connection* con, int final, int abort)
     if (!con->total) return 1;
     type = RECORD_ABORT;
   }
-  else
-    type = final ? (con->total ? RECORD_END : RECORD_ONCE) : RECORD_DATA;
+  else {
+    type = 0;
+    if (con->buf_length)
+      type |= RECORD_DATA;
+    if (final)
+      type |= RECORD_EOS;
+  }
 
   if (!check_rotate(con->buf_length)) return 0;
 
