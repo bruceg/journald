@@ -24,21 +24,16 @@
 #include <sys/time.h>
 #include <sys/uio.h>
 #include <unistd.h>
+
 #include "hash.h"
 #include "journald_server.h"
-
-static int fdout = 0;
-static char file_header[16] = "journald" "\0\0\0\2" "\0\0\0\0";
+#include "writer.h"
 
 #define HEADER_SIZE (1+4+4+4)
 
-static char saved_type = 0;
-static unsigned long journal_syncpos;
-static unsigned long journal_pos;
-static unsigned long journal_size;
-static unsigned char* journal;
-static unsigned pagesize;
-static unsigned pageshift;
+// static unsigned char saved_type = 0;
+// static unsigned long saved_pos;
+static unsigned long pageoff;
 
 #define RECORD_EOJ    0
 #define RECORD_INFO  'I'
@@ -47,51 +42,70 @@ static unsigned pageshift;
 #define RECORD_END   'E'
 #define RECORD_ABORT 'A'
 
-static void set_pageshift(void)
-{
-  unsigned i;
-  for (pageshift = 0, i = pagesize = getpagesize();
-       i != 0;
-       ++pageshift, i >>= 1) ;
-}
-  
-static void ulong2bytes(unsigned long v, unsigned char bytes[4])
+static unsigned char* ulong2bytes(unsigned long v, unsigned char bytes[4])
 {
   bytes[3] = (unsigned char)(v & 0xff); v >>= 8;
   bytes[2] = (unsigned char)(v & 0xff); v >>= 8;
   bytes[1] = (unsigned char)(v & 0xff); v >>= 8;
   bytes[0] = (unsigned char)(v & 0xff);
+  return bytes + 4;
+}
+
+static int writer_write(const unsigned char* data, unsigned long bytes)
+{
+  unsigned long available;
+  while (bytes) {
+    available = writer_pagesize - pageoff;
+    if (bytes >= available) {
+      memcpy(writer_pagebuf + pageoff, data, available);
+      pageoff = 0;
+      if (!writer_writepage()) return 0;
+      data += available;
+      bytes -= available;
+      available = writer_pagesize - pageoff;
+    }
+    else {
+      memcpy(writer_pagebuf + pageoff, data, bytes);
+      pageoff += bytes;
+      break;
+    }
+  }
+  return 1;
 }
 
 static int write_record_raw(char type,
 			    unsigned long stream, unsigned long record,
 			    unsigned long buflen, const char* buf)
 {
-  static HASH_CTX hash;
-  unsigned char* ptr;
-  unsigned long reclen;
-  
-  reclen = HEADER_SIZE + buflen + HASH_SIZE;
-  if (journal_pos + reclen + 1 >= journal_size)
-    if (!rotate_journal()) return 0;
+  HASH_CTX hash;
+  unsigned char header[HEADER_SIZE];
+  unsigned char hashbuf[HASH_SIZE];
 
-  ptr = journal + journal_pos;
-  if (opt_twopass && saved_type == 0) {
-    saved_type = type;
-    ptr[0] = RECORD_EOJ;
-  }
-  else
-    ptr[0] = type;
-  ulong2bytes(stream, ptr+1);
-  ulong2bytes(record, ptr+5);
-  ulong2bytes(buflen, ptr+9);
-  memcpy(ptr+HEADER_SIZE, buf, buflen);
   hash_init(&hash);
-  hash_update(&hash, ptr, HEADER_SIZE+buflen);
-  hash_finish(&hash, ptr+HEADER_SIZE+buflen);
-  ptr[reclen] = RECORD_EOJ;
+  /* hash/write the header */
+  header[0] = type;
+  ulong2bytes(stream, header+1);
+  ulong2bytes(record, header+5);
+  ulong2bytes(buflen, header+9);
+  hash_update(&hash, header, HEADER_SIZE);
+#if 0
+  // FIXME: twopass
+  if (opt_twopass && saved_type == 0) {
+    saved_pos = writer_pos;
+    saved_type = type;
+    header[0] = RECORD_EOJ;
+  }
+#endif
+  if (!writer_write(header, HEADER_SIZE)) return 0;
 
-  journal_pos += reclen;
+  /* hash/write the data */
+  hash_update(&hash, buf, buflen);
+  if (!writer_write(buf, buflen)) return 0;
+
+  /* finish the hash and write it */
+  hash_finish(&hash, hashbuf);
+  if (!writer_write(hashbuf, HASH_SIZE)) return 0;
+
   return 1;
 }
 
@@ -103,16 +117,20 @@ static int write_ident(connection* con)
   return write_record_raw(RECORD_INFO, con->number, 0, con->ident_len+4, buf);
 }
 
-static int mdatasync(unsigned long start, unsigned long end)
-{
-  start = (start >> pageshift) << pageshift;
-  return msync(journal + start, end - start, MS_SYNC|MS_INVALIDATE) == 0;
-}
-
 static int sync_journal(void)
 {
-  journal[journal_pos] = RECORD_EOJ;
-  return mdatasync(journal_syncpos, journal_pos + 1);
+  unsigned long prev;
+  if (pageoff) {
+    memset(writer_pagebuf+pageoff, 0, writer_pagesize-pageoff);
+    if (!writer_writepage()) return 0;
+  }
+  pageoff = 0;
+  prev = writer_pos;
+  memset(writer_pagebuf, 0, writer_pagesize);
+  if (!writer_writepage()) return 0;
+  if (!writer_sync()) return 0;
+  if (!writer_seek(prev)) return 0;
+  return 1;
 }
 
 int rotate_journal(void)
@@ -121,7 +139,7 @@ int rotate_journal(void)
 
   if (!sync_records()) return 0;
   sync();
-  journal_syncpos = journal_pos = sizeof file_header;
+  if (!writer_seek(writer_pagesize)) return 0;
   if (!sync_journal()) return 0;
   
   for (i = 0; i < opt_connections; i++)
@@ -129,21 +147,37 @@ int rotate_journal(void)
   return 1;
 }
 
+static void make_file_header(void)
+{
+  unsigned char* p = writer_pagebuf;
+  HASH_CTX hash;
+  memset(p, 0, writer_pagesize);
+  memcpy(p, "journald", 8); p += 8;
+  p = ulong2bytes(2, p);
+  p = ulong2bytes(writer_pagesize, p);
+  // FIXME: fill in real option flags
+  p = ulong2bytes(0, p);
+  *p++ = 0;
+  hash_init(&hash);
+  hash_update(&hash, writer_pagebuf, p - writer_pagebuf);
+  hash_finish(&hash, p); p += HASH_SIZE;
+  pageoff = p - writer_pagebuf;
+}
+
 int open_journal(const char* filename)
 {
-  static struct stat statbuf;
-  set_pageshift();
-  if ((fdout = open(filename, O_RDWR)) == -1) return 0;
-  if (fstat(fdout, &statbuf) == -1) return 0;
-  journal_size = (statbuf.st_size >> pageshift) << pageshift;
-  if ((journal = mmap(0, journal_size, PROT_WRITE, MAP_SHARED,
-		      fdout, 0)) == (unsigned char*)-1)
-    return 0;
-  memcpy(journal, file_header, sizeof file_header);
-  journal_syncpos = 0;
-  journal_pos = sizeof file_header;
+  if (writer_init(filename) == 0) return 0;
+  make_file_header();
   if (!sync_journal()) return 0;
-  journal_syncpos = journal_pos;
+  return 1;
+}
+
+static int check_rotate(unsigned long buflen)
+{
+  if (writer_pos + pageoff +
+      HEADER_SIZE + buflen + HASH_SIZE + 1 + writer_pagesize >= writer_size)
+    if (!rotate_journal())
+      return 0;
   return 1;
 }
 
@@ -158,6 +192,8 @@ int write_record(connection* con, int final, int abort)
   }
   else
     type = final ? (con->total ? RECORD_END : RECORD_ONCE) : RECORD_DATA;
+
+  if (!check_rotate(con->buf_length)) return 0;
 
   if (!con->wrote_ident) {
     if (!write_ident(con)) return 0;
@@ -175,18 +211,24 @@ int write_record(connection* con, int final, int abort)
 
 int sync_records(void)
 {
-  if (journal_syncpos == journal_pos) return 1;
-  if (opt_twopass && saved_type == 0) return 1;
+  // FIXME: unsigned long orig_pos;
+  // FIXME: if (opt_twopass && saved_type == 0) return 1;
 
   /* Sync the data */
   if (!sync_journal()) return 0;
 
+#if 0
+  // FIXME: twopass
   if (opt_twopass) {
     /* Then restore the original starting record type byte and sync again */
-    journal[journal_syncpos] = saved_type;
-    if (!mdatasync(journal_syncpos, journal_syncpos + 1)) return 0;
+    orig_pos = writer_pos;
+    if (!writer_seek(saved_pos) ||
+	!writer_write(&saved_type, 1) ||
+	!writer_sync() ||
+	!writer_seek(orig_pos))
+      return 0;
     saved_type = 0;
   }
-  journal_syncpos = journal_pos;
+#endif
   return 1;
 }
