@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "journald.h"
+#include "journald_server.h"
 
 /*
   Per-connection algorithm:

@@ -21,7 +21,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include "hash.h"
-#include "journald.h"
+#include "journald_server.h"
 
 void die(const char* msg)
 {

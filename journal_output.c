@@ -5,7 +5,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include "hash.h"
-#include "journald.h"
+#include "journald_server.h"
 
 static int fdout = 0;
 static char header[16] = "journald" "\0\0\0\1" "\0\0\0\0";
