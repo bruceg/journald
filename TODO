@@ -1,13 +1,6 @@
 ! Rewrite stdio code to use iobuf!
 ! Use str lib etc!
 
-- Make the three writer options selectable journald options.
-
-- Set up a conf-writer switch to build a single journald binary from the
-  three possibilities.
-
-? Automate the conf-writer switch?
-
 - Benchmark which journald really works fastest, if there's any difference.
   - fdatasync seems fastest, then mmap, then open-sync
 

@@ -1,5 +1,0 @@
-journald.o
-socketio.o
-writer.o
-writer-fdatasync.o
-crc64.o

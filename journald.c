@@ -53,6 +53,7 @@ static gid_t opt_gid = -1;
 static mode_t opt_umask = 0;
 static int opt_backlog = 128;
 static int opt_synconexit = 0;
+static const char* opt_writer = "fdatasync";
 
 unsigned opt_connections = 10;
 connection* connections;
@@ -68,7 +69,9 @@ static const char* usage_str =
 "               (default 10)\n"
 "  -b N         Allow a backlog of N connections.\n"
 "  -t N         Pause synchronization by N us. (default 10ms)\n"
-"  -s           Sync on exit/interrupt\n";
+"  -s           Sync on exit/interrupt\n"
+"  -w NAME      Writer synchronization method. (default fdatasync)\n"
+"               Choices are: fdatasync, open+sync, or mmap.\n";
 
 static void usage(const char* message)
 {
@@ -132,7 +135,7 @@ static void parse_options(int argc, char* argv[])
   int opt;
   char* ptr;
   argv0 = argv[0];
-  while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:t:s")) != EOF) {
+  while((opt = getopt(argc, argv, "qQvc:u:g:Ub:B:m:t:sw:")) != EOF) {
     switch(opt) {
     case 't':
       opt_timeout = strtol(optarg, &ptr, 10);
@@ -162,10 +165,14 @@ static void parse_options(int argc, char* argv[])
       opt_backlog = strtoul(optarg, &ptr, 10);
       if (*ptr != 0) usage("Invalid backlog count.");
       break;
+    case 'w':
+      opt_writer = optarg;
+      break;
     default:
       usage(0);
     }
   }
+  if (!writer_select(opt_writer)) usage("Invalid writer name");
   argc -= optind;
   argv += optind;
   if (argc != 2) usage(0);
