@@ -185,24 +185,20 @@ int sync_records(void)
   char type[1];
   if (opt_twopass && !saved_type) return 1;
 
-  /* First, append an empty record marker and sync the data */
-  type[0] = 0;
-  if (write(fdout, type, 1) != 1) return 0;
+  /* Sync the data */
   if (fdatasync(fdout)) return 0;
 
   if (opt_twopass) {
     /* Then restore the original starting record type byte and sync again */
-    if (lseek(fdout, -(transaction_size+1), SEEK_CUR) == -1) return 0;
+    if (lseek(fdout, -(transaction_size), SEEK_CUR) == -1) return 0;
     type[0] = saved_type;
     if (write(fdout, type, 1) != 1) return 0;
     if (fdatasync(fdout)) return 0;
     saved_type = 0;
 
     /* Finally, seek back to where this routine started. */
-    if (lseek(fdout, transaction_size-1, SEEK_CUR) == -1) return 0;
+    if (lseek(fdout, transaction_size, SEEK_CUR) == -1) return 0;
   }
-  else
-    if (lseek(fdout, -1, SEEK_CUR) == -1) return 0;
   
   transaction_size = 0;
   return 1;
