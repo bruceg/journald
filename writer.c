@@ -1,4 +1,4 @@
-/* journal_output.c - Journal file output and synchronization.
+/* writer.c - Journal file output and synchronization.
    Copyright (C) 2002 Bruce Guenter
 
    This program is free software; you can redistribute it and/or modify

@@ -1,5 +1,5 @@
 journald.o
 journal_input.o
-journal_output.o
+writer.o
 writer-mmap.o
 crc64.o
