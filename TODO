@@ -18,9 +18,6 @@
 - On interrupt, journald should wait for connections to close before
   exiting, and then close (no rotate needed).
 
-- Figure out how to rotate the journal at the *END* of syncing a
-  transaction instead of at the beginning.
-
 - Clean up the file format and documentation.
 
 - Write journal-dump, producing a low-level data dump.

@@ -207,6 +207,8 @@ int write_record(connection* con, int final, int abort)
   con->total += con->buf_length;
   con->records++;
   con->buf_length = 0;
+
+  if (!check_rotate(1)) return 0;
   return 1;
 }
 
