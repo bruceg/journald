@@ -1,0 +1,22 @@
+Socket protocol:
+
+- Server sends an identifier code to the client.
+- Client sends a series of non-zero length strings.
+- Client sends a zero-length string.
+- Server sends an acknowledgement code and closes the socket.
+
+Notes:
+
+- All numbers are represented as ASCII decimals followed by a NUL byte.
+
+- A "string" above is represented as a length number followed
+  immediately by that many bytes of data.
+
+- It is assumed that the client has written the data to a permanent file
+  store (asynchronously) before sending it to the journalling process.
+
+- In the event of restoring the data from the journal, the identifier
+  will be used to uniquely identify the record being extracted.  The
+  client will either need to use some method of associating that
+  identifier with the on-disk record, or embed its own identifier into
+  the data.

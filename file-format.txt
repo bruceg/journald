@@ -1,0 +1,34 @@
+- The data file is broken down into 512 byte blocks
+  - This is the same size as the block size on most hard drives, which
+    assures us of atomic writes.
+  - Page size might make block writes more efficient.
+
+- Each bundle consists of a control header followed by zero or more
+  records.
+
+- The bundle immediately following the last one is marked as empty.
+
+- Each bundle is at least one block long, and will always start on a
+  block boundary.
+
+- Data from multiple records are concatenated into one bundle.
+
+Control Block Format:
+- Total bundle length (in blocks)
+  0 means end of journal
+- Number of records in this bundle (N)
+- N times the following:
+  - Record type (single byte):
+    S == start of the records for the given ID
+    F == first continuation data for the given ID in the journal
+         (for records that continue after the end of the journal)
+    E == end of the records for the given ID
+    O == start and end of record
+    C == continued data for the given ID
+    All record types may contain data.
+    Possible sequences of record types: O; S C* E; F C* E
+  - Record ID
+  - Offset from start of record data (in bytes, for "F" records only)
+  - Record data length (in bytes)
+Unless otherwise noted, all the above are numbers represented in ASCII
+followed by a NUL byte.

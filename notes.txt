@@ -1,0 +1,44 @@
+Journalling daemon
+
+- Pre-allocated journal file (?)
+- Allows multiple connections
+- The data from multiple connections is bundled into large writes to the
+  journal
+- Use mmap & msync for highest speed (won't update mtime)
+
+Issues:
+- How to handle writes larger than the journal size?
+  - The last write to the journal triggers a sync(2)
+  - Assume connector is simultaneously writing data to permanent store
+
+Per-record journal strategy:
+- read in a block of data
+- write out data with dummy start control block
+- write out end control block
+- sync journal
+- fixup start control block prefix
+- write out start control block
+- sync journal
+
+Socket protocol:
+- Server sends an identifier code to the client.
+- Client sends a series of non-zero length netstrings.
+- Client sends a zero-length netstring.
+- Server sends an acknowledgement code and closes the socket.
+
+Client requirements:
+- Client must write data to a permanent store as well as the journal.
+
+Journal reader:
+- For each valid bundle in the journal:
+  - For each record started in this bundle:
+    - Search for its end marker
+    - If no end marker is found, ignore the record
+    - Start a subprocess for this record, with the record ID and start
+      offset as command-line arguments
+  - For each record in this bundle:
+    - Pipe the data for that record to the associated subprocess
+  - For each record ended in this bundle:
+    - Close the pipe and wait for the process to exit
+- Optimizations:
+  - pre-read in all the bundle headers
