@@ -53,7 +53,7 @@ static const char* usage_str =
 "               (slower, but guarantees consistency)\n"
 "  -x N         Maximum journal file size, in bytes. (default 1000000)\n";
 
-void usage(const char* message)
+static void usage(const char* message)
 {
   if (message)
     fprintf(stderr, "%s: %s\n", argv0, message);
@@ -61,13 +61,13 @@ void usage(const char* message)
   exit(1);
 }
 
-void log_status(void)
+static void log_status(void)
 {
   if (opt_verbose)
     printf("journald: status: %d/%d\n", connection_count, opt_connections);
 }
 
-void log_connection_exit(int slot)
+static void log_connection_exit(int slot)
 {
   if (opt_verbose)
     printf("journald: end %d bytes %ld records %ld %s\n", slot,
@@ -76,7 +76,7 @@ void log_connection_exit(int slot)
   log_status();
 }
 
-void log_connection_start(int slot)
+static void log_connection_start(int slot)
 {
   if (opt_verbose)
     printf("journald: start %d\n", slot);
@@ -89,7 +89,7 @@ void die(const char* msg)
   exit(1);
 }
 
-void use_uid(const char* str)
+static void use_uid(const char* str)
 {
   char* ptr;
   if (!str) usage("UID not found in environment.");
@@ -97,7 +97,7 @@ void use_uid(const char* str)
   if (*ptr != 0) usage("Invalid UID number");
 }
 
-void use_gid(const char* str)
+static void use_gid(const char* str)
 {
   char* ptr;
   if (!str) usage("GID not found in environment.");
@@ -105,7 +105,7 @@ void use_gid(const char* str)
   if (*ptr != 0) usage("Invalid GID number");
 }
 
-void parse_options(int argc, char* argv[])
+static void parse_options(int argc, char* argv[])
 {
   int opt;
   char* ptr;
@@ -160,7 +160,7 @@ static void nonblock(int fd)
   if (fcntl(fd, F_SETFL, flags) == -1) die("fcntl");
 }
 
-int make_socket()
+static int make_socket()
 {
   struct sockaddr_un* saddr;
   int s;
@@ -183,7 +183,7 @@ int make_socket()
   return s;
 }
 
-void handle_connection(connection* con)
+static void handle_connection(connection* con)
 {
   static char buf[4096];
   unsigned long rd;
@@ -207,7 +207,7 @@ void handle_connection(connection* con)
   }
 }
 
-void accept_connection(int s)
+static void accept_connection(int s)
 {
   int fd;
   int i;
@@ -231,7 +231,7 @@ void accept_connection(int s)
   }
 }
 
-void do_select(int s)
+static void do_select(int s)
 {
   static fd_set rfds;
   int fdmax;
@@ -264,7 +264,7 @@ void do_select(int s)
   }
 }
 
-void handle_intr()
+static void handle_intr()
 {
   rotate_journal();
   if (opt_delete)
