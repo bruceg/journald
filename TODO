@@ -1,5 +1,5 @@
 - Modify journal_read to wait for new records to be output to the
   "current" file.
 
-- Modify the file format to allign transaction starts on block boundaries.
+- Modify the file format to align transaction starts on block boundaries.
 

@@ -1,0 +1,10 @@
+-------------------------------------------------------------------------------
+Changes in version 0.2
+
+New Features:
+- journal_read now spawns seperate processes to handle each
+  transaction's data stream.
+
+Bug Fixes:
+- Fixed handling of partial (non-multiples of 64 bytes) blocks in MD4.
+-------------------------------------------------------------------------------
