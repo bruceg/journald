@@ -37,3 +37,6 @@ Design Decisions:
     multiple string formats, thereby reducing the complexity of the
     required code.
 
+- Include incremental global record number in each record
+  - On wrap-around, this protects against older records being considered as
+    valid after newer ones.
