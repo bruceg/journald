@@ -23,7 +23,6 @@
 #include <dirent.h>
 #include <unistd.h>
 #include "hash.h"
-#include "journald_server.h"
 
 void die(const char* msg)
 {
@@ -183,10 +182,21 @@ static void del_handler(handler* find)
   }
 }
 
+static char* alloc_buffer(unsigned long size)
+{
+  static char* buf = 0;
+  static unsigned long prev_size = 0;
+  if (size >= prev_size) {
+    if (buf) free(buf);
+    buf = malloc(size);
+    prev_size = size;
+  }
+  return buf;
+}
+
 static int read_record(int in)
 {
   static unsigned char header[1+4+4+4];
-  static char buf[CBUFSIZE+HASH_SIZE];
   static char hcmp[HASH_SIZE];
   static HASH_CTX hash;
   char type;
@@ -196,6 +206,7 @@ static int read_record(int in)
   unsigned long reclen;
   const unsigned char* hdrptr;
   handler* h;
+  char* buf;
   
   if (read(in, header, sizeof header) != sizeof header) return 0;
   hdrptr = header;
@@ -203,7 +214,7 @@ static int read_record(int in)
   strnum = bytes2ulong(hdrptr); hdrptr += 4;
   recnum = bytes2ulong(hdrptr); hdrptr += 4;
   reclen = bytes2ulong(hdrptr);
-  if (reclen > CBUFSIZE) return 0;
+  buf = alloc_buffer(reclen+HASH_SIZE);
   if (read(in, buf, reclen+HASH_SIZE) != reclen+HASH_SIZE)
     return 0;
   hash_init(&hash);
