@@ -55,3 +55,9 @@ Record Format:
 - Record IDs are a string supplied by the client.
 
 - The same Record ID may appear multiple times in the same transaction.
+
+- The following "magic" entries can be used to identify journald files:
+0	string		journald	Journald file
+>8	belong		x		version %d
+>12	belong		x		(file #%ld)
+>17	belong		x		(rec# %ld)
