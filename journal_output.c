@@ -149,7 +149,6 @@ static void make_file_header(void)
   p = ulong2bytes(global_recnum, p);
   // FIXME: fill in real option flags, including concurrency
   p = ulong2bytes(0, p);
-  *p++ = 0;
   hash_init(&hash);
   hash_update(&hash, writer_pagebuf, p - writer_pagebuf);
   hash_finish(&hash, p); p += HASH_SIZE;
