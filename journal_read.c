@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <dirent.h>
 #include <unistd.h>
 #include "hash.h"
@@ -87,6 +88,98 @@ static struct dirent* read_directory(void)
   return de;
 }
 
+struct handler
+{
+  unsigned long stream;
+  int pipefd;
+  pid_t pid;
+  struct handler* next;
+};
+typedef struct handler handler;
+
+static char* ulongtoa(unsigned long i)
+{
+  static char buf[21];
+  char* ptr;
+  if (!i) return "0";
+  ptr = buf+20;
+  *ptr-- = 0;
+  while (i) {
+    *ptr-- = (i % 10) + '0';
+    i /= 10;
+  }
+  return ptr+1;
+}
+
+static char** opt_argv;
+static int opt_argc;
+
+static handler* start_handler(unsigned long offset,
+			      char* id, unsigned long idlen)
+{
+  pid_t pid;
+  handler* n;
+  int pipefds[2];
+  
+  if (pipe(pipefds)) die("pipe");
+  if ((pid = fork()) == -1) die("fork");
+  if (!pid) {
+    close(pipefds[1]);
+    close(0);
+    dup2(pipefds[0], 0);
+    close(pipefds[0]);
+    id[idlen] = 0;
+    opt_argv[opt_argc+0] = id;
+    opt_argv[opt_argc+1] = ulongtoa(offset);
+    opt_argv[opt_argc+2] = 0;
+    execvp(opt_argv[0], opt_argv);
+    die("exec");
+  }
+  close(pipefds[0]);
+  n = malloc(sizeof(handler));
+  n->pid = pid;
+  n->pipefd = pipefds[1];
+  n->next = 0;
+  return n;
+}
+
+static handler* handlers;
+
+static handler* find_handler(unsigned long stream, unsigned long offset,
+			     const char* id, unsigned long idlen)
+{
+  handler* ptr;
+  for (ptr = handlers; ptr; ptr = ptr->next)
+    if (ptr->stream == stream)
+      break;
+  if (!ptr) {
+    ptr = start_handler(offset, (char*)id, idlen);
+    ptr->stream = stream;
+    ptr->next = handlers;
+    handlers = ptr;
+  }
+  return ptr;
+}
+
+static void end_handler(unsigned long stream)
+{
+  handler* prev;
+  handler* ptr;
+  int status;
+  for (prev = 0, ptr = handlers; ptr; prev = ptr, ptr = ptr->next) {
+    if (ptr->stream == stream) {
+      if (prev)
+	prev->next = ptr->next;
+      else
+	handlers = ptr->next;
+      close(ptr->pipefd);
+      waitpid(ptr->pid, &status, WUNTRACED);
+      free(ptr);
+      return;
+    }
+  }
+}
+
 static int read_record(int in)
 {
   static unsigned char header[1+4+4+4+4+4];
@@ -100,6 +193,7 @@ static int read_record(int in)
   unsigned long idlen;
   unsigned long reclen;
   const unsigned char* hdrptr;
+  handler* h;
   
   if (read(in, header, sizeof header) != sizeof header) return 0;
   hdrptr = header;
@@ -117,12 +211,9 @@ static int read_record(int in)
   hash_update(&hash, buf, idlen+reclen);
   hash_finish(&hash, hcmp);
   if (memcmp(buf+idlen+reclen, hcmp, HASH_SIZE)) return 0;
-  printf("+%c:%lu:%lu:%lu:%lu,%lu:", type, strnum,
-	 recnum, recoff, idlen, reclen);
-  fwrite(buf, idlen, 1, stdout);
-  fwrite("->", 2, 1, stdout);
-  fwrite(buf+idlen, reclen, 1, stdout);
-  putchar('\n');
+  h = find_handler(strnum, recoff, buf, idlen);
+  if (write(h->pipefd, buf+idlen, reclen) != reclen) die("write to child");
+  if (type == 'O' || type == 'E') end_handler(strnum);
   return 1;
 }
 
@@ -143,16 +234,20 @@ static void read_journal(const char* filename)
     ;
   close(in);
 }
- 
+
 int main(int argc, char* argv[])
 {
   struct dirent* de;
   unsigned i;
-  if (argc != 2) {
-    fprintf(stderr, "usage: %s directory\n", argv[0]);
+  if (argc < 3) {
+    fprintf(stderr, "usage: %s directory program [args ...]\n", argv[0]);
     return 1;
   }
   if (chdir(argv[1])) die("chdir");
+  opt_argc = argc - 2;
+  opt_argv = malloc(sizeof(char*) * (opt_argc+3));
+  for (i = 0; i < opt_argc; i++)
+    opt_argv[i] = argv[i+2];
   de = read_directory();
   for (i = 0; de[i].d_name[0]; i++)
     read_journal(de[i].d_name);
