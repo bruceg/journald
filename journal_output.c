@@ -31,8 +31,6 @@
 
 #define HEADER_SIZE (1+4+4+4+4)
 
-// static unsigned char saved_type = 0;
-// static unsigned long saved_pos;
 static unsigned long pageoff;
 
 static unsigned long global_recnum = 0;
@@ -91,14 +89,6 @@ static int write_record_raw(char type,
   ulong2bytes(record, header+9);
   ulong2bytes(buflen, header+13);
   hash_update(&hash, header, HEADER_SIZE);
-#if 0
-  // FIXME: twopass
-  if (opt_twopass && saved_type == 0) {
-    saved_pos = writer_pos;
-    saved_type = type;
-    header[0] = RECORD_EOJ;
-  }
-#endif
   if (!writer_write(header, HEADER_SIZE)) return 0;
 
   /* hash/write the data */
@@ -122,7 +112,7 @@ static int write_ident(connection* con)
 			  con->ident_len+4, buf);
 }
 
-static int sync_journal(void)
+int sync_records(void)
 {
   unsigned long prev;
   if (pageoff) {
@@ -163,7 +153,7 @@ int rotate_journal(void)
   sync();
   if (!writer_seek(0)) return 0;
   make_file_header();
-  if (!sync_journal()) return 0;
+  if (!sync_records()) return 0;
   
   for (i = 0; i < opt_connections; i++)
     connections[i].wrote_ident = 0;
@@ -175,7 +165,7 @@ int open_journal(const char* filename)
   if (writer_init(filename) == 0) return 0;
   if (writer_size < writer_pagesize * 4) return 0;
   make_file_header();
-  if (!sync_journal()) return 0;
+  if (!sync_records()) return 0;
   return 1;
 }
 
@@ -215,29 +205,5 @@ int write_record(connection* con, int final, int abort)
   con->buf_length = 0;
 
   if (!check_rotate(1)) return 0;
-  return 1;
-}
-
-int sync_records(void)
-{
-  // FIXME: unsigned long orig_pos;
-  // FIXME: if (opt_twopass && saved_type == 0) return 1;
-
-  /* Sync the data */
-  if (!sync_journal()) return 0;
-
-#if 0
-  // FIXME: twopass
-  if (opt_twopass) {
-    /* Then restore the original starting record type byte and sync again */
-    orig_pos = writer_pos;
-    if (!writer_seek(saved_pos) ||
-	!writer_write(&saved_type, 1) ||
-	!writer_sync() ||
-	!writer_seek(orig_pos))
-      return 0;
-    saved_type = 0;
-  }
-#endif
   return 1;
 }

@@ -26,7 +26,6 @@ typedef struct connection connection;
 
 extern connection* connections;
 extern unsigned opt_connections;
-extern int opt_twopass;
 
 extern void die(const char* msg);
 extern void handle_data(connection* con, char* data, unsigned long size);

@@ -54,7 +54,6 @@ static mode_t opt_umask = 0;
 static int opt_backlog = 128;
 static int opt_synconexit = 0;
 
-int opt_twopass = 0;
 unsigned opt_connections = 10;
 connection* connections;
 
@@ -68,9 +67,6 @@ static const char* usage_str =
 "  -c N         Do not handle more than N simultaneous connections.\n"
 "               (default 10)\n"
 "  -b N         Allow a backlog of N connections.\n"
-"  -1           Single-pass transaction commit (default).\n"
-"  -2           Re-write the type flag to commit a transaction.\n"
-"               (slower, but guarantees consistency)\n"
 "  -t N         Pause synchronization by N us. (default 10ms)\n"
 "  -s           Sync on exit/interrupt\n";
 
@@ -138,8 +134,6 @@ static void parse_options(int argc, char* argv[])
   argv0 = argv[0];
   while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:t:s")) != EOF) {
     switch(opt) {
-    case '1': opt_twopass = 0; break;
-    case '2': opt_twopass = 1; break;
     case 't':
       opt_timeout = strtol(optarg, &ptr, 10);
       if (*ptr != 0 || opt_timeout >= 1000000) usage("Invalid timeout.");

@@ -1,5 +1,3 @@
-- Restore operation of two-pass mode.
-
 - Set up a conf-writer switch to build a single journald binary from the
   three possibilities.
 
@@ -12,8 +10,7 @@
 
 - Rewrite file format documentation in HTML.
 
-? Modify the file format to add timestamp and transaction index to
-  records?
+? Modify the file format to add timestamp to records?
 
 - Clean up the file format and documentation.
 
