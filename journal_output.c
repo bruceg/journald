@@ -167,6 +167,7 @@ static void make_file_header(void)
 int open_journal(const char* filename)
 {
   if (writer_init(filename) == 0) return 0;
+  if (writer_size < writer_pagesize * 4) return 0;
   make_file_header();
   if (!sync_journal()) return 0;
   return 1;
