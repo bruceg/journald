@@ -31,14 +31,14 @@
 
 static int jflush(journald_client* j)
 {
-  unsigned long length;
+  uint32 length;
   char* ptr;
-  unsigned long wr;
+  uint32 wr;
   length = j->bufpos;
   ptr = j->buf;
   while (length > 0) {
     wr = write(j->fd, ptr, length);
-    if (wr == (unsigned long)-1) return 0;
+    if (wr == (uint32)-1) return 0;
     length -= wr;
     ptr += wr;
   }
@@ -46,9 +46,9 @@ static int jflush(journald_client* j)
   return 1;
 }
 
-static int jwrite(journald_client* j, const char* data, unsigned long size)
+static int jwrite(journald_client* j, const char* data, uint32 size)
 {
-  unsigned long length;
+  uint32 length;
   while (size + j->bufpos >= JOURNALD_BUFSIZE) {
     length = JOURNALD_BUFSIZE - j->bufpos;
     memcpy(j->buf+j->bufpos, data, length);
@@ -62,15 +62,10 @@ static int jwrite(journald_client* j, const char* data, unsigned long size)
   return 1;
 }
 
-int journald_write(journald_client* j, const char* data, unsigned long size)
+int journald_write(journald_client* j, const char* data, uint32 size)
 {
   char buf[4];
-  unsigned long v = size;
-  
-  buf[3] = v & 0xff; v >>= 8;
-  buf[2] = v & 0xff; v >>= 8;
-  buf[1] = v & 0xff; v >>= 8;
-  buf[0] = v;
+  uint32_pack_lsb(size, buf);
   
   return jwrite(j, buf, 4) && jwrite(j, data, size);
 }
@@ -120,7 +115,7 @@ int journald_close(journald_client* j)
 }
 
 int journald_oneshot(const char* path, const  char* ident,
-		     const char* data, unsigned long length)
+		     const char* data, uint32 length)
 {
   journald_client* j;
 

@@ -33,11 +33,11 @@
   - Close connection
 */
 
-static unsigned long read_ident_length(connection* con,
-				       unsigned char* bytes,
-				       unsigned long size)
+static uint32 read_ident_length(connection* con,
+				unsigned char* bytes,
+				uint32 size)
 {
-  unsigned long used;
+  uint32 used;
   used = 0;
   while (size) {
     con->ident_len <<= 8;
@@ -55,11 +55,11 @@ static unsigned long read_ident_length(connection* con,
   return used;
 }
 
-static unsigned long read_ident(connection* con,
-				unsigned char* bytes,
-				unsigned long size)
+static uint32 read_ident(connection* con,
+			 unsigned char* bytes,
+			 uint32 size)
 {
-  unsigned long used;
+  uint32 used;
 
   used = con->ident_len - con->count;
   if (used > size) used = size;
@@ -73,11 +73,11 @@ static unsigned long read_ident(connection* con,
   return used;
 }
 
-static unsigned long read_record_length(connection* con,
-					unsigned char* bytes,
-					unsigned long size)
+static uint32 read_record_length(connection* con,
+				 unsigned char* bytes,
+				 uint32 size)
 {
-  unsigned long used;
+  uint32 used;
   used = 0;
   while (size) {
     con->length <<= 8;
@@ -101,12 +101,12 @@ static unsigned long read_record_length(connection* con,
   return used;
 }
 
-static unsigned long read_record(connection* con,
-				 unsigned char* bytes,
-				 unsigned long size)
+static uint32 read_record(connection* con,
+			  unsigned char* bytes,
+			  uint32 size)
 {
-  unsigned long used;
-  unsigned long use;
+  uint32 used;
+  uint32 use;
   used = 0;
   while (size) {
     if (con->buf_length == CBUFSIZE) {
@@ -134,9 +134,9 @@ static unsigned long read_record(connection* con,
   return used;
 }
 
-void handle_data(connection* con, char* data, unsigned long size)
+void handle_data(connection* con, char* data, uint32 size)
 {
-  unsigned long used;
+  uint32 used;
   if (!size) {
     write_record(con, 0, 1);
   }

@@ -1,6 +1,8 @@
 #ifndef JOURNALD__READER__H__
 #define JOURNALD__READER__H__
 
+#include <uint32.h>
+
 #define DEBUG_JOURNAL 1
 
 extern const char program[];
@@ -10,11 +12,11 @@ extern char** reader_argv;
 
 struct stream
 {
-  unsigned long strnum;
-  unsigned long recnum;
-  unsigned long offset;
-  unsigned long start_offset;
-  unsigned long identlen;
+  uint32 strnum;
+  uint32 recnum;
+  uint32 offset;
+  uint32 start_offset;
+  uint32 identlen;
   char* ident;
   struct stream* next;
   void* data;
@@ -22,7 +24,7 @@ struct stream
 typedef struct stream stream;
 
 extern void init_stream(stream* s);
-extern void append_stream(stream* s, const char* buf, unsigned long reclen);
+extern void append_stream(stream* s, const char* buf, uint32 reclen);
 extern void end_stream(stream* s);
 extern void abort_stream(stream* s);
 

@@ -16,7 +16,7 @@ static int _sync(void)
 
 extern int writer_file_open_flags;
 extern int writer_file_init(const char* path);
-extern int writer_file_seek(unsigned long);
+extern int writer_file_seek(uint32);
 extern int writer_file_writepage(void);
 
 void writer_open_sync_select(void)

@@ -25,27 +25,19 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <uint32.h>
 #include "flags.h"
 #include "hash.h"
 #include "server.h"
 #include "writer.h"
 
-static unsigned long pageoff;
+static uint32 pageoff;
 
-static unsigned long global_recnum = 0;
+static uint32 global_recnum = 0;
 
-static unsigned char* ulong2bytes(unsigned long v, unsigned char bytes[4])
+static int writer_write(const unsigned char* data, uint32 bytes)
 {
-  bytes[3] = (unsigned char)(v & 0xff); v >>= 8;
-  bytes[2] = (unsigned char)(v & 0xff); v >>= 8;
-  bytes[1] = (unsigned char)(v & 0xff); v >>= 8;
-  bytes[0] = (unsigned char)(v & 0xff);
-  return bytes + 4;
-}
-
-static int writer_write(const unsigned char* data, unsigned long bytes)
-{
-  unsigned long available;
+  uint32 available;
   while (bytes) {
     available = writer_pagesize - pageoff;
     if (bytes >= available) {
@@ -65,9 +57,9 @@ static int writer_write(const unsigned char* data, unsigned long bytes)
   return 1;
 }
 
-static int write_record_raw(unsigned type,
-			    unsigned long stream, unsigned long record,
-			    unsigned long buflen, const char* buf)
+static int write_record_raw(uint32 type,
+			    uint32 stream, uint32 record,
+			    uint32 buflen, const char* buf)
 {
   HASH_CTX hash;
   unsigned char header[HEADER_SIZE];
@@ -75,11 +67,11 @@ static int write_record_raw(unsigned type,
 
   hash_init(&hash);
   /* hash/write the header */
-  ulong2bytes(type, header);
-  ulong2bytes(global_recnum, header+4);
-  ulong2bytes(stream, header+8);
-  ulong2bytes(record, header+12);
-  ulong2bytes(buflen, header+16);
+  uint32_pack_lsb(type, header);
+  uint32_pack_lsb(global_recnum, header+4);
+  uint32_pack_lsb(stream, header+8);
+  uint32_pack_lsb(record, header+12);
+  uint32_pack_lsb(buflen, header+16);
   hash_update(&hash, header, HEADER_SIZE);
   if (!writer_write(header, HEADER_SIZE)) return 0;
 
@@ -98,7 +90,7 @@ static int write_record_raw(unsigned type,
 static int write_ident(connection* con)
 {
   static char buf[4+IDENTSIZE];
-  ulong2bytes(con->total, buf);
+  uint32_pack_lsb(con->total, buf);
   memcpy(buf+4, con->ident, con->ident_len);
   return write_record_raw(RECORD_INFO, con->number, con->records,
 			  con->ident_len+4, buf);
@@ -106,7 +98,7 @@ static int write_ident(connection* con)
 
 int sync_records(void)
 {
-  unsigned long prev;
+  uint32 prev;
   if (pageoff) {
     memset(writer_pagebuf+pageoff, 0, writer_pagesize-pageoff);
     if (!writer_writepage()) return 0;
@@ -126,10 +118,10 @@ static void make_file_header(void)
   HASH_CTX hash;
   memset(p, 0, writer_pagesize);
   memcpy(p, "journald", 8); p += 8;
-  p = ulong2bytes(2, p);
-  p = ulong2bytes(writer_pagesize, p);
-  p = ulong2bytes(global_recnum, p);
-  p = ulong2bytes(0, p);
+  uint32_pack_lsb(2, p); p += 4;
+  uint32_pack_lsb(writer_pagesize, p); p += 4;
+  uint32_pack_lsb(global_recnum, p); p += 4;
+  uint32_pack_lsb(0, p); p += 4;
   hash_init(&hash);
   hash_update(&hash, writer_pagebuf, p - writer_pagebuf);
   hash_finish(&hash, p); p += HASH_SIZE;
@@ -160,7 +152,7 @@ int open_journal(const char* filename)
   return 1;
 }
 
-static int check_rotate(unsigned long buflen)
+static int check_rotate(uint32 buflen)
 {
   if (writer_pos + pageoff +
       HEADER_SIZE + buflen + HASH_SIZE + 1 + writer_pagesize >= writer_size)

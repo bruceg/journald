@@ -246,9 +246,9 @@ static void do_sync(void)
 static void handle_connection(connection* con)
 {
   static char buf[4096];
-  unsigned long rd;
+  uint32 rd;
   rd = read(con->fd, buf, sizeof buf);
-  if (!rd || rd == (unsigned long)-1) {
+  if (!rd || rd == (uint32)-1) {
     write_record(con, 0, 1);
     con->state = -1;
   }

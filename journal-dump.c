@@ -67,7 +67,7 @@ void init_stream(stream* s)
   obuf_puts(&outbuf, "'\n");
 }
 
-void append_stream(stream* s, const char* buf, unsigned long reclen)
+void append_stream(stream* s, const char* buf, uint32 reclen)
 {
   obuf_putstream(&outbuf, s, "append bytes ");
   obuf_putu(&outbuf, reclen);

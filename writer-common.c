@@ -26,13 +26,13 @@
 
 int (*writer_init)(const char* path);
 int (*writer_sync)(void);
-int (*writer_seek)(unsigned long offset);
+int (*writer_seek)(uint32 offset);
 int (*writer_writepage)(void);
 
-unsigned long writer_pos;
-unsigned long writer_size;
+uint32 writer_pos;
+uint32 writer_size;
+uint32 writer_pagesize;
 unsigned char* writer_pagebuf;
-unsigned writer_pagesize;
 
 int writer_fd;
 
@@ -79,9 +79,9 @@ int writer_file_init(const char* path)
   return 1;
 }
 
-int writer_file_seek(unsigned long offset)
+int writer_file_seek(uint32 offset)
 {
-  if ((unsigned long)lseek(writer_fd, offset, SEEK_SET) != offset)
+  if ((uint32)lseek(writer_fd, offset, SEEK_SET) != offset)
     return 0;
   writer_pos = offset;
   return 1;
@@ -91,7 +91,7 @@ int writer_file_writepage(void)
 {
   if (writer_pos + writer_pagesize > writer_size)
     return 0;
-  if ((unsigned long)
+  if ((uint32)
       write(writer_fd, writer_pagebuf, writer_pagesize) != writer_pagesize)
     return 0;
   writer_pos += writer_pagesize;

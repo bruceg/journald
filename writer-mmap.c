@@ -3,8 +3,8 @@
 
 #include "writer.h"
 
-static unsigned long start;
-static unsigned long end;
+static uint32 start;
+static uint32 end;
 static unsigned char* map;
 
 static int _init(const char* path)
@@ -26,7 +26,7 @@ static int _sync(void)
   return 1;
 }
 
-static int _seek(unsigned long offset)
+static int _seek(uint32 offset)
 {
   writer_pos = offset;
   writer_pagebuf = map + writer_pos;

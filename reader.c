@@ -37,16 +37,11 @@ int reader_argc;
 char** reader_argv;
 
 static stream* streams;
-static unsigned long pagesize;
-static unsigned long global_recnum;
+static uint32 pagesize;
+static uint32 global_recnum;
 
-static unsigned long bytes2ulong(const unsigned char bytes[4])
-{
-  return (bytes[0]<<24) | (bytes[1]<<16) | (bytes[2]<<8) | bytes[3];
-}
-
-static stream* new_stream(unsigned long strnum, unsigned long recnum,
-			  unsigned long offset, char* id, unsigned long idlen)
+static stream* new_stream(uint32 strnum, uint32 recnum,
+			  uint32 offset, char* id, uint32 idlen)
 {
   stream* n;
   n = malloc(sizeof(stream));
@@ -63,7 +58,7 @@ static stream* new_stream(unsigned long strnum, unsigned long recnum,
   return n;
 }
 
-static stream* find_stream(unsigned long strnum)
+static stream* find_stream(uint32 strnum)
 {
   stream* ptr;
   for (ptr = streams; ptr; ptr = ptr->next)
@@ -89,17 +84,17 @@ static void del_stream(stream* find)
   }
 }
 
-void str_copyu(str* s, unsigned long u)
+void str_copyu(str* s, uint32 u)
 {
   str_truncate(s, 0) && str_catu(s, u);
 }
 
-static void handle_record(unsigned long typeflags, unsigned long strnum,
-			  unsigned long recnum, unsigned long reclen,
+static void handle_record(uint32 typeflags, uint32 strnum,
+			  uint32 recnum, uint32 reclen,
 			  const char* buf)
 {
   stream* h;
-  unsigned long offset;
+  uint32 offset;
   static str srecnum;
   static str sstrnum;
   static str soffset;
@@ -124,7 +119,7 @@ static void handle_record(unsigned long typeflags, unsigned long strnum,
     }
   }
   else if (typeflags & RECORD_INFO) {
-    offset = bytes2ulong(buf);
+    offset = uint32_get_lsb(buf);
     if (h)
       warn3("Info record for existing stream #", sstrnum.s, ", ignoring");
     else {
@@ -162,22 +157,22 @@ static int read_record(unsigned char header[HEADER_SIZE], ibuf* in)
 {
   static char hcmp[HASH_SIZE];
   static HASH_CTX hash;
-  unsigned long strnum;
-  unsigned long recnum;
-  unsigned long grecnum;
-  unsigned long reclen;
-  unsigned long typeflags;
+  uint32 strnum;
+  uint32 recnum;
+  uint32 grecnum;
+  uint32 reclen;
+  uint32 typeflags;
   unsigned char* hdrptr;
   static str buf;
 
   hdrptr = header;
-  typeflags = bytes2ulong(hdrptr); hdrptr += 4;
-  grecnum = bytes2ulong(hdrptr); hdrptr += 4;
+  typeflags = uint32_get_lsb(hdrptr); hdrptr += 4;
+  grecnum = uint32_get_lsb(hdrptr); hdrptr += 4;
   if (grecnum != global_recnum)
     die1(1, "Global record number mismatch.");
-  strnum = bytes2ulong(hdrptr); hdrptr += 4;
-  recnum = bytes2ulong(hdrptr); hdrptr += 4;
-  reclen = bytes2ulong(hdrptr);
+  strnum = uint32_get_lsb(hdrptr); hdrptr += 4;
+  recnum = uint32_get_lsb(hdrptr); hdrptr += 4;
+  reclen = uint32_get_lsb(hdrptr);
   str_ready(&buf, reclen+HASH_SIZE);
   if (!ibuf_read(in, buf.s, reclen+HASH_SIZE))
     die1sys(1, "Could not read record data.");
@@ -195,7 +190,7 @@ static int read_record(unsigned char header[HEADER_SIZE], ibuf* in)
 
 static int skip_page(ibuf* in)
 {
-  unsigned long pos;
+  uint32 pos;
   pos = ibuf_tell(in);
   return ibuf_seek(in, pos + (pagesize - pos%pagesize));
 }
@@ -204,11 +199,11 @@ static int read_transaction(ibuf* in)
 {
   unsigned char header[HEADER_SIZE];
   if (!ibuf_read(in, header, HEADER_SIZE)) return 0;
-  if (bytes2ulong(header) == 0) return 0;
+  if (uint32_get_lsb(header) == 0) return 0;
   do {
     if (!read_record(header, in)) return 0;
     if (!ibuf_read(in, header, HEADER_SIZE)) return 0;
-  } while (bytes2ulong(header) != 0);
+  } while (uint32_get_lsb(header) != 0);
   return skip_page(in);
 }
 
@@ -233,12 +228,12 @@ void read_journal(const char* filename)
     die3(1, "'", filename, "' has invalid header check code");
   if (memcmp(header, "journald", 8) != 0)
     die3(1, "'", filename, "' is not a journald file (missing signature)");
-  if (bytes2ulong(header+8) != 2)
+  if (uint32_get_lsb(header+8) != 2)
     die3(1, "'", filename, "' is not a version 2 journald file");
-  if ((pagesize = bytes2ulong(header+12)) == 0)
+  if ((pagesize = uint32_get_lsb(header+12)) == 0)
     die3(1, "'", filename, "' has zero page size");
-  global_recnum = bytes2ulong(header+16);
-  if (bytes2ulong(header+20) != 0)
+  global_recnum = uint32_get_lsb(header+16);
+  if (uint32_get_lsb(header+20) != 0)
     die3(1, "'", filename, "' has non-zero options length, can't handle it");
   
   if (!skip_page(&in))

@@ -107,10 +107,10 @@ void init_stream(stream* s)
   *(int*)(s->data) = fd;
 }
 
-void append_stream(stream* s, const char* buf, unsigned long reclen)
+void append_stream(stream* s, const char* buf, uint32 reclen)
 {
   int fd;
   fd = *(int*)(s->data);
-  if ((unsigned long)write(fd, buf, reclen) != reclen)
+  if ((uint32)write(fd, buf, reclen) != reclen)
     die1sys(1, "write to temporary file failed");
 }
