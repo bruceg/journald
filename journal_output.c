@@ -24,7 +24,7 @@ static void ulong2bytes(unsigned long v, char bytes[4])
   bytes[0] = v;
 }
 
-static int rotate_journal(void)
+int rotate_journal(void)
 {
   static char buf[60];
   char* ptr;

@@ -253,6 +253,7 @@ void do_select(int s)
 
 void handle_intr()
 {
+  rotate_journal();
   if (opt_delete)
     unlink(opt_socket);
   exit(0);

@@ -1,6 +1,3 @@
-- When journald is killed, sync and rotate the output file, but don't
-  open a new one.
-
 - Make the sync timing intelligent in order to batch transactions.
 
 - Modify journal_read to wait for new records to be output to the
