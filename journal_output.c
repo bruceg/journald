@@ -27,7 +27,7 @@
 
 #include "flags.h"
 #include "hash.h"
-#include "journald_server.h"
+#include "server.h"
 #include "writer.h"
 
 static unsigned long pageoff;

@@ -27,7 +27,7 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include "journald_server.h"
+#include "server.h"
 
 extern void setup_env(int, const char*);
 

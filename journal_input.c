@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "journald_server.h"
+#include "server.h"
 
 /*
   Per-connection algorithm:
