@@ -21,6 +21,19 @@ Design Decisions:
 - Include stream identifier meta-data with the stream
 
 - Delay committing transactions for a fraction of a second
+  - Committing a transaction takes much longer than just writing data.
+  - The cost of committing one transaction cannot be reduced.
+  - The cost of committing N transactions can be reduced to that of
+    committing one transaction by doing all the commits simultaneously.
+  - If multiple connections are active, it is likely that one of the
+    other connections will complete its data after the first one
+    completes.
+  - By waiting a fraction of a second, the first commit is delayed
+    slightly, but the cost of that commit may be amortized by other
+    commits happening simultaneously.
 
 - Uniform length-prefixed string format
+  - Reduces complexity of file formats and protocols, compared to using
+    multiple string formats, thereby reducing the complexity of the
+    required code.
 
