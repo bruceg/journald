@@ -111,7 +111,7 @@ static int read_record(int in)
   hash_update(&hash, buf, idlen+reclen);
   hash_finish(&hash, hcmp);
   if (memcmp(buf+idlen+reclen, hcmp, HASH_SIZE)) return 0;
-  printf("%c:%lu:%lu,%lu:", type, recnum, idlen, reclen);
+  printf("+%c:%lu:%lu,%lu:", type, recnum, idlen, reclen);
   fwrite(buf, idlen, 1, stdout);
   fwrite("->", 2, 1, stdout);
   fwrite(buf+idlen, reclen, 1, stdout);
