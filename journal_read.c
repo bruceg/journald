@@ -88,16 +88,6 @@ static struct dirent* read_directory(void)
   return de;
 }
 
-struct handler
-{
-  unsigned long stream;
-  unsigned long offset;
-  int fd;
-  pid_t pid;
-  struct handler* next;
-};
-typedef struct handler handler;
-
 static char* ulongtoa(unsigned long i)
 {
   static char buf[21];
@@ -115,37 +105,57 @@ static char* ulongtoa(unsigned long i)
 static char** opt_argv;
 static int opt_argc;
 
-static handler* start_handler(unsigned long offset,
-			      char* id, unsigned long idlen)
+struct handler
+{
+  unsigned long stream;
+  unsigned long offset;
+  unsigned long start_offset;
+  int fd;
+  unsigned long identlen;
+  char* ident;
+  struct handler* next;
+};
+typedef struct handler handler;
+
+static void exec_handler(handler* h)
 {
   pid_t pid;
-  handler* n;
-  int pipefds[2];
   
-  if (pipe(pipefds)) die("pipe");
+  if (lseek(h->fd, 0, SEEK_SET) != 0) die("lseek");
   if ((pid = fork()) == -1) die("fork");
   if (!pid) {
-    close(pipefds[1]);
     close(0);
-    dup2(pipefds[0], 0);
-    close(pipefds[0]);
-    id[idlen] = 0;
-    opt_argv[opt_argc+0] = id;
-    opt_argv[opt_argc+1] = ulongtoa(offset);
+    dup2(h->fd, 0);
+    close(h->fd);
+    opt_argv[opt_argc+0] = h->ident;
+    opt_argv[opt_argc+1] = ulongtoa(h->start_offset);
     opt_argv[opt_argc+2] = 0;
     execvp(opt_argv[0], opt_argv);
     die("exec");
   }
-  close(pipefds[0]);
-  n = malloc(sizeof(handler));
-  n->pid = pid;
-  n->fd = pipefds[1];
-  n->offset = offset;
-  n->next = 0;
-  return n;
+  if (waitpid(pid, 0, WUNTRACED) != pid) die("waitpid");
 }
 
 static handler* handlers;
+
+static handler* add_handler(unsigned long stream, unsigned long offset,
+			    char* id, unsigned long idlen)
+{
+  char filename[] = "journal_read.tmp.XXXXXX";
+  handler* n;
+  n = malloc(sizeof(handler));
+  n->stream = stream;
+  n->offset = n->start_offset = offset;
+  if ((n->fd = mkstemp(filename)) == -1) die("mkstemp");
+  if (unlink(filename)) die("unlink");
+  n->identlen = idlen;
+  n->ident = malloc(idlen+1);
+  memcpy(n->ident, id, idlen);
+  n->ident[idlen] = 0;
+  n->next = handlers;
+  handlers = n;
+  return n;
+}
 
 static handler* find_handler(unsigned long stream)
 {
@@ -156,11 +166,10 @@ static handler* find_handler(unsigned long stream)
   return ptr;
 }
 
-static void end_handler(handler* find)
+static void del_handler(handler* find)
 {
   handler* prev;
   handler* ptr;
-  int status;
   for (prev = 0, ptr = handlers; ptr; prev = ptr, ptr = ptr->next) {
     if (ptr == find) {
       if (prev)
@@ -168,7 +177,6 @@ static void end_handler(handler* find)
       else
 	handlers = ptr->next;
       close(ptr->fd);
-      waitpid(ptr->pid, &status, WUNTRACED);
       free(ptr);
       return;
     }
@@ -207,30 +215,27 @@ static int read_record(int in)
   h = find_handler(strnum);
   if (type == 'A') {
     if (h)
-      end_handler(h);
+      del_handler(h);
   }
   else if (type == 'I') {
     offset = bytes2ulong(buf);
     if (h) {
       if (offset != h->offset) {
 	printf("journal_read: "
-	       "Bad offset value for stream #%lu, dropping\n"
+	       "Bad offset value for stream #%lu, dropping stream\n"
 	       "  Offset was %lu, should be %lu\n", h->stream,
 	       offset, h->offset);
-	end_handler(h);
+	del_handler(h);
       }
     }
-    else {
-      h = start_handler(offset, (char*)buf+4, reclen-4);
-      h->stream = strnum;
-      h->next = handlers;
-      handlers = h;
-    }
+    else
+      add_handler(strnum, offset, (char*)buf+4, reclen-4);
   }
   else {
     if (type == 'O' || type == 'D' || type == 'E') {
       if (h) {
-	if (write(h->fd, buf, reclen) != reclen) die("write to child");
+	if (write(h->fd, buf, reclen) != reclen)
+	  die("write to temporary file");
 	h->offset += reclen;
       }
       else
@@ -238,8 +243,10 @@ static int read_record(int in)
 	       "Data record for nonexistant stream #%lu\n", strnum);
     }
     if (type == 'O' || type == 'E') {
-      if (h)
-	end_handler(h);
+      if (h) {
+	exec_handler(h);
+	del_handler(h);
+      }
       else
 	printf("journal_read: "
 	       "End record for nonexistant stream #%lu\n", strnum);
