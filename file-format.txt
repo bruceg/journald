@@ -58,23 +58,23 @@ Stream Information Data Format:
 - Current stream offset
 - Identifier string
 
-- All record types may contain data.  Data for "A" records is ignored.
+- All record types may contain data.  Data for ABORT records, and records
+  without the DATA flag is ignored.
 
-- The first record in a transaction is initially marked with a NUL
-  record type, which is restored after the rest of the data is sync'ed
-  to disk (two-pass algorithm).
+- The global record number is a sequential marker that is incremented on
+  each record that does not mark the end of a transaction.
 
 - The stream number is a sequential marker that starts at zero when the
-  server starts up, and may not be zero for the first record in the
+  server starts up, and could be non-zero for the first record in the
   file.
 
 - The record number is a sequential marker that starts at zero for each
   new stream.
 
 - Possible sequences of record types within a stream:
-  I O
-  I D* E
-  I D* A
+  INFO DATA|EOS
+  INFO DATA* EOS
+  INFO DATA* ABORT
 
 - Unless otherwise noted, all the above numbers are represented as a
   4-byte binary value, MSB first.
