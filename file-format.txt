@@ -9,17 +9,33 @@
 
 - The transaction immediately following the last one is marked as empty.
 
-- Data from multiple records are concatenated into one transaction.
+- Data from multiple records may be concatenated into one transaction.
+
+- Check code is 64-bit CRC (8 bytes)
+  - Polynomial is x64 + x4 + x3 + x1 + 1.
 
 File Header Format:
 - Constant string (8 bytes): "journald"
 - Version (2)
+- Page size (maximum of OS page size and FS block size)
+- Option bytes
+- Option data (variable size)
+- Check code
+- NUL padding to the end of the first page
+
+Option Data:
+- NUL seperated list of ASCII strings?
+
+Options:
 - Writer concurrency
-- Option flags
+
+Transaction Format:
+- Zero or more records (empty transaction marks the end of journal)
+- One NUL byte
+- NUL padding to the end of the page (should be ignored by reader)
 
 Record Format:
 - Record type (single byte):
-  NUL: end of journal, anything else means a potentially valid transaction
   "I": stream information
   "D": data record for the given stream
   "O": first and last record (once) for the given stream
@@ -29,8 +45,8 @@ Record Format:
 - Record number
 - Record data length
 - Record data
-- A 128-bit MD4 hash on all the data from the non-zero value of the
-  record type flag to the last byte of the record data.
+- Check code on all the data from the record type flag to the last byte
+  of the record data.
 
 Stream Information Data Format:
 - Current stream offset
