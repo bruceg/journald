@@ -23,7 +23,8 @@ make CFLAGS="$RPM_OPT_FLAGS" all
 
 %install
 rm -fr $RPM_BUILD_ROOT
-make install_prefix=$RPM_BUILD_ROOT bindir=%{_bindir} mandir=%{_mandir} install
+make install_prefix=$RPM_BUILD_ROOT \
+	bindir=%{_bindir} libdir=%{_libdir} mandir=%{_mandir} install
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -32,3 +33,4 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root)
 %doc COPYING NEWS README TODO
 %{_bindir}/*
+%{_libdir}/*
