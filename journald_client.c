@@ -27,7 +27,7 @@ static int socket_open(const char* path, const char* ident)
   if (connect(fd, (struct sockaddr*)saddr, SUN_LEN(saddr)) == -1) return -1;
   free(saddr);
 
-  size = strlen(ident);
+  size = strlen(ident) + 1;
   while (size) {
     wr = write(fd, ident, size);
     if (!wr || wr == -1) {
@@ -64,7 +64,7 @@ int journald_write(int fd, const char* data, long length)
   
   ptr = lenstr + 29;
   *ptr-- = 0;
-  for (tmp = length; length > 0; length /= 10)
+  for (tmp = length; tmp > 0; tmp /= 10)
     *ptr-- = (tmp % 10) + '0';
   ++ptr;
   
@@ -83,7 +83,7 @@ static int read_status_close(int fd)
   
   if (read(fd, tmp, 1) != 1) return -1;
   close(fd);
-  return tmp[0] ? -1 : 1;
+  return tmp[0] ? 0 : -1;
 }
 
 int journald_close(int fd)
