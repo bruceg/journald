@@ -1,0 +1,181 @@
+<h2><a href="journald.html">journald</a></h2>
+
+<h1>journald File Format version 3</h1>
+
+<ul>
+
+<li>The journal file is composed of a file header followed by zero or
+more complete transactions and completed with padding or garbage bytes.
+Each transaction is composed of one or more records.
+
+<li>Atomic transactions are ensured by the initial "data flag" on each
+transaction.
+
+<li>Each transaction consists of a control header followed by zero or more
+records, followed by a check code.
+
+<li>The transaction immediately following the last one is marked as
+empty.
+
+</ul>
+
+<h2>1. File Header Format</h2>
+
+<table border=1>
+
+<tr> <th>Size</th> <th>Type</th> <th>Description</th> </tr>
+
+<tr> <td>8</td> <td>string</td> <td>Constant file identifier
+"journald"</td> </tr>
+
+<tr> <td>4</td> <td>integer</td> <td>File version identifier (3)</td>
+</tr>
+
+<tr> <td>4</td> <td>integer</td> <td>Page size (maxiumum of OS page size
+and FS block size)</td> </tr>
+
+<tr> <td>4</td> <td>integer</td> <td>First global record number</td>
+</tr>
+
+<tr> <td>4+N</td> <td>string</td> <td>Option data, formatted as NUL
+seperated list of ASCII strings</td> </tr>
+
+<tr> <td>8</td> <td>check</td> <td>Check code</td> </tr>
+
+<tr> <td>pad</td> <td>?</td> <td>NUL padding to the end of the first
+page</td> </tr>
+
+</table>
+
+<h3>1.1. Options</h3>
+
+<li>Writer concurrency
+
+<h2>2. Transaction Format</h2>
+
+<ol>
+
+<li>Zero or more records (empty transaction marks the end of journal)
+
+<li>One NUL byte
+
+<li>NUL padding to the end of the page (should be ignored by reader)
+
+</ol>
+
+<h2>3. Record Format</h2>
+
+<table border=1>
+
+<tr> <th>Size</th> <th>Type</th> <th>Description</th> </tr>
+
+<tr> <td>4</td> <td>integer</td> <td>Record type | flags</td> </tr>
+
+<tr> <td>4</td> <td>integer</td> <td>Global record number</td> </tr>
+
+<tr> <td>4</td> <td>integer</td> <td>Stream number</td> </tr>
+
+<tr> <td>4</td> <td>integer</td> <td>Local (per-stream) record
+number</td> </tr>
+
+<tr> <td>4</td> <td>integer</td> <td>Record data length L</td> </tr>
+
+<tr> <td>L</td> <td>integer</td> <td>Record data</td> </tr>
+
+<tr> <td>8</td> <td>CRC</td> <td>Check code on all the data from the
+record type flag to the last byte of the record data.</td> </tr>
+
+</table>
+
+<h3>3.1. Record Types</h3>
+
+<table border=1>
+
+<tr> <th>Value</th> <th>Name</th> <th>Description</th> </tr>
+
+<tr> <td>0xf</td> <td>TYPE</td> <td>mask for valid type bits; all other
+bits are flags</td> </tr>
+
+<tr> <td>0x0</td> <td>EOT</td> <td>end of transaction; all flags must be
+zero</td> </tr>
+
+<tr> <td>0x1</td> <td>INFO</td> <td>stream information</td> </tr>
+
+<tr> <td>0x2</td> <td>DATA</td> <td>data record for the stream</td>
+</tr>
+
+<tr> <td>0x4</td> <td>EOS</td> <td>end of the records for the stream
+(both DATA and EOS may be set at once)</td> </tr>
+
+<tr> <td>0x8</td> <td>ABORT</td> <td>abort record</td> </tr>
+
+</table>
+
+<h2>4. Stream Information Data Format</h2>
+
+<ol>
+
+<li>Current stream offset
+
+<li>Identifier string
+
+</ol>
+
+<h2>5. Miscelaneous Notes</h2>
+
+<ul>
+
+<li>Unless otherwise specified, all the above numbers are represented as
+a 4-byte binary value, LSB first.
+
+<li>Unless otherwise specified, all strings are prefixed with their length
+
+<li>The check code is a 64-bit CRC (8 bytes) with a polynomial of: x^64
++ x^62 + x^57 + x^55 + x^54 + x^53 + x^52 + x^47 + x^46 + x^45 + x^40 +
+x^39 + x^38 + x^37 + x^35 + x^33 + x^32 + x^31 + x^29 + x^27 + x^24 +
+x^23 + x^22 + x^21 + x^19 + x^17 + x^13 + x^12 + x^10 + x^9 + x^7 + x^4
++ x + 1 (the same as what is used in the DLT1 spec ECMA-182).  The check
+code always covers all the data from the first byte of the header or
+record up to and including the last byte before the CRC.
+
+<li>All record types may contain data.  Data for ABORT records, and
+records without the DATA flag is ignored.
+
+<li>The global record number is a sequential marker that is incremented
+on each record that does not mark the end of a transaction.
+
+<li>The stream number is a sequential marker that starts at zero when
+the server starts up, and could be non-zero for the first record in the
+file.
+
+<li>The record number is a sequential marker that starts at zero for
+each new stream.
+
+<li>Possible sequences of record types within a stream:
+
+<ol>
+
+  <li>INFO, zero or more DATA, EOS
+
+  <li>INFO, zero or more DATA, DATA|EOS
+
+  <li>INFO, zero or more DATA, ABORT
+
+</ol>
+
+<li>The stream information record always has a record number of zero,
+and do not affect the record numbering of other records.
+
+<li>The stream information record for a given stream will always precede
+any data records for that stream within an individual journal file.
+
+<li>The following "magic" entries can be used to identify journald
+files:
+
+<pre>
+0	string		journald	Journald file
+>8	lelong		x		version %d
+>12	lelong		x		page size %d
+</pre>
+
+</ul>
