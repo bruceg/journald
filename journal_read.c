@@ -15,6 +15,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -86,56 +87,54 @@ static struct dirent* read_directory(void)
   return de;
 }
 
-static int read_record(FILE* in)
+static int read_record(int in)
 {
   static unsigned char header[1+4+4+4];
-  static char ibuf[IDENTSIZE];
-  static char rbuf[CBUFSIZE];
-  static char hbuf[HASH_SIZE];
+  static char buf[IDENTSIZE+CBUFSIZE+HASH_SIZE];
   static char hcmp[HASH_SIZE];
+  static HASH_CTX hash;
   char type;
   unsigned long recnum;
   unsigned long idlen;
   unsigned long reclen;
-  HASH_CTX hash;
   
-  if (fread(header, sizeof header, 1, in) != 1) return 0;
+  if (read(in, header, sizeof header) != sizeof header) return 0;
   if ((type = header[0]) == 0) return 0;
   recnum = bytes2ulong(header+1);
   idlen = bytes2ulong(header+5);
   reclen = bytes2ulong(header+9);
   if (idlen > IDENTSIZE || reclen > CBUFSIZE) return 0;
-  if (fread(ibuf, idlen, 1, in) != 1) return 0;
-  if (fread(rbuf, reclen, 1, in) != 1) return 0;
-  if (fread(hbuf, HASH_SIZE, 1, in) != 1) return 0;
+  if (read(in, buf, idlen+reclen+HASH_SIZE) != idlen+reclen+HASH_SIZE)
+    return 0;
   hash_init(&hash);
   hash_update(&hash, header, sizeof header);
-  hash_update(&hash, ibuf, idlen);
-  hash_update(&hash, rbuf, reclen);
+  hash_update(&hash, buf, idlen+reclen);
   hash_finish(&hash, hcmp);
-  if (memcmp(hbuf, hcmp, HASH_SIZE)) return 0;
+  if (memcmp(buf+idlen+reclen, hcmp, HASH_SIZE)) return 0;
   printf("%c:%lu:%lu,%lu:", type, recnum, idlen, reclen);
-  fwrite(ibuf, idlen, 1, stdout);
+  fwrite(buf, idlen, 1, stdout);
   fwrite("->", 2, 1, stdout);
-  fwrite(rbuf, reclen, 1, stdout);
+  fwrite(buf+idlen, reclen, 1, stdout);
   putchar('\n');
   return 1;
 }
 
 static void read_journal(const char* filename)
 {
+#undef FAIL
 #define FAIL(MSG) do{fprintf(stderr,"journal_read: " MSG ", skipping\n", filename);return;}while(0)
   static char header[16];
-  FILE* in;
-  if ((in = fopen(filename, "r")) == 0) FAIL("Could not open '%s'");
-  if (fread(header, sizeof header, 1, in) != 1)
+  int in;
+  if ((in = open(filename, O_RDONLY)) == -1) FAIL("Could not open '%s'");
+  if (read(in, header, sizeof header) != sizeof header)
     FAIL("Could not read header from '%s'");
   if (memcmp(header, "journald", 8)) FAIL("'%s' is not a journald file");
   if (bytes2ulong(header+8) != 1)
     FAIL("'%s' is not a version 1 journald file");
+  printf("File:%s\n", filename);
   while (read_record(in))
     ;
-  fclose(in);
+  close(in);
 }
  
 int main(int argc, char* argv[])
