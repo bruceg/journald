@@ -28,7 +28,7 @@ static int jflush(journald_client* j)
   return 1;
 }
 
-static int jwrite(journald_client* j, const char* data, long size)
+static int jwrite(journald_client* j, const char* data, unsigned long size)
 {
   long length;
   while (size + j->bufpos >= JOURNALD_BUFSIZE) {
@@ -44,7 +44,20 @@ static int jwrite(journald_client* j, const char* data, long size)
   return 1;
 }
 
-static journald_client* socket_open(const char* path, const char* ident)
+int journald_write(journald_client* j, const char* data, unsigned long size)
+{
+  char buf[4];
+  unsigned long v = size;
+  
+  buf[3] = v & 0xff; v >>= 8;
+  buf[2] = v & 0xff; v >>= 8;
+  buf[1] = v & 0xff; v >>= 8;
+  buf[0] = v;
+  
+  return jwrite(j, buf, 4) && jwrite(j, data, size);
+}
+
+journald_client* journald_open(const char* path, const char* ident)
 {
   size_t size;
   struct sockaddr_un* saddr;
@@ -64,47 +77,11 @@ static journald_client* socket_open(const char* path, const char* ident)
   memset(j, 0, sizeof(journald_client));
   j->fd = fd;
   
-  if (!jwrite(j, ident, strlen(ident)+1)) {
+  if (!journald_write(j, ident, strlen(ident))) {
     free(j);
     j = 0;
   }
   return j;
-}
-
-journald_client* journald_open(const char* path, const char* ident)
-{
-  journald_client* j;
-  
-  if (!(j = socket_open(path, ident))) return 0;
-  
-  if (!jwrite(j, "", 1)) {
-    close(j->fd);
-    free(j);
-    j = 0;
-  }
-  return j;
-}
-
-int journald_write(journald_client* j, const char* data, long length)
-{
-  char lenstr[30];
-  char* ptr;
-  long tmp;
-  size_t wr;
-  size_t total;
-  
-  ptr = lenstr + 29;
-  *ptr-- = 0;
-  for (tmp = length; tmp > 0; tmp /= 10)
-    *ptr-- = (tmp % 10) + '0';
-  ++ptr;
-  
-  if (!jwrite(j, ptr, lenstr+30-ptr)) return 0;
-
-  for (total = 0; length > 0; total += wr, data += wr, length -= wr)
-    if (!jwrite(j, data, length)) return 0;
-
-  return 1;
 }
 
 static int read_status_close(journald_client* j)
@@ -120,16 +97,16 @@ static int read_status_close(journald_client* j)
 
 int journald_close(journald_client* j)
 {
-  if (!jwrite(j, "", 1)) return 0;
+  if (!journald_write(j, 0, 0)) return 0;
   return read_status_close(j);
 }
 
 int journald_oneshot(const char* path, const  char* ident,
-		     const char* data, long length)
+		     const char* data, unsigned long length)
 {
   journald_client* j;
 
-  if (!(j = socket_open(path, ident))) return 0;
+  if (!(j = journald_open(path, ident))) return 0;
   if (!journald_write(j, data, length)) return 0;
   return read_status_close(j);
 }
