@@ -5,6 +5,11 @@ New Features:
 - journal_read now spawns seperate processes to handle each
   transaction's data stream.
 
+Internal Changes:
+- Modified file format to better support extraction of the streams of
+  data, and to avoid repeating the (potentially long) stream ID string
+  in each record.
+
 Bug Fixes:
 - Fixed handling of partial (non-multiples of 64 bytes) blocks in MD4.
 -------------------------------------------------------------------------------
