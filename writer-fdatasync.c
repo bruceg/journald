@@ -8,7 +8,7 @@ static int _init(const char* path)
 {
   if (!writer_open(path, 0)) return 0;
   if ((writer_pagebuf = mmap(0, writer_pagesize, PROT_READ|PROT_WRITE,
-			     MAP_PRIVATE|MAP_ANONYMOUS, 0, 0)) == 0)
+			     MAP_PRIVATE|MAP_ANON, 0, 0)) == 0)
     return 0;
   return 1;
 }
