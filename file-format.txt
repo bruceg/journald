@@ -29,7 +29,7 @@ Record Format:
 - Record data length
 - Record ID
 - Record data
-- A 128-bit MD5 hash on all the data from the non-zero value of the
+- A 128-bit MD4 hash on all the data from the non-zero value of the
   record type flag to the last byte of the record data.
 
 - All record types (except "A") may contain data.

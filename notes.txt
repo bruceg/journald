@@ -40,3 +40,11 @@ Journal reader:
     - Close the pipe and wait for the process to exit
 - Optimizations:
   - pre-read in all the bundle headers
+
+Design Decisions:
+
+- Use MD4 as a block check code:
+  - Is faster (!) than CRC on P2/P3/Celeron CPUs
+  - Offers more bits of protection than CRC
+  - Even though there are cryptographic attacks against it, we don't use
+    it for that purpose.
