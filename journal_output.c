@@ -32,13 +32,6 @@ static CRC32 set_iov(struct iovec* iov, char* data, long size, CRC32 crc)
 static char saved_type = 0;
 static long bytes_written = 0;
 
-/*
-  TODO:
-  - Temporarily mark the first part of a transaction
-  - Rotate the output file after writing
-  - Partial writes
-*/
-
 int write_record(connection* con, int final, int abort)
 {
   char type[1];
@@ -76,6 +69,8 @@ int write_record(connection* con, int final, int abort)
   if ((wr = writev(fdout, iov, 6)) != 1+4+4+con->ident_len+con->buf_length+4)
     return 0;
   bytes_written += wr;
+  con->total += con->buf_length;
+  con->records++;
   con->not_first = 1;
   con->buf_length = 0;
   return 1;

@@ -2,11 +2,6 @@
 #include "journald.h"
 
 /*
-  TODO:
-  - Rewrite the state functions to read multiple bytes at once
-*/
-
-/*
   Per-connection algorithm:
   - Accept connection
   - Read in identifier length (state 0: reading identifier length)
@@ -19,8 +14,6 @@
   - Send OK code (state -1: sending response)
   - Close connection
 */
-
-int needs_fsync = 0;
 
 static int read_ident_length(connection* con, char byte)
 {
@@ -59,8 +52,6 @@ static int read_record_length(connection* con, char byte)
     }
     else {
       con->ok = write_record(con, 1, 0);
-      if (con->ok)
-	needs_fsync = 1;
       return -1;
     }
   }
@@ -83,8 +74,6 @@ static int read_record(connection* con, char byte)
   }
   return 3;
 }
-
-#define DEBUG
 
 void handle_data(connection* con, char* data, long size)
 {
