@@ -4,7 +4,7 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#include "md5.h"
+#include "hash.h"
 #include "journald.h"
 
 static int fdout = 0;
@@ -69,58 +69,54 @@ int open_journal(void)
 }
 
 static void set_iov(struct iovec* iov, char* data, unsigned long size,
-		    struct md5_ctx* hash)
+		    HASH_CTX* hash)
 {
   iov->iov_base = data;
   iov->iov_len = size;
-  md5_process_bytes(data, size, hash);
+  hash_update(hash, data, size);
 }
 
 int write_record(connection* con, int final, int abort)
 {
-  char type[1];
-  struct iovec iov[7];
-  unsigned char ilen[4];
-  unsigned char rlen[4];
-  unsigned char recnum[4];
-  unsigned char hashbytes[16];
-  struct md5_ctx hash;
+  char type;
+  struct iovec iov[4];
+  unsigned char hdr[1+4+4+4];
+  unsigned char hashbytes[HASH_SIZE];
+  HASH_CTX hash;
   unsigned long wr;
   unsigned long reclen;
   
   if (abort) {
     con->buf_length = 0;
     if (!con->not_first) return 1;
-    type[0] = 'A';
+    type = 'A';
   }
   else
-    type[0] = final ?
+    type = final ?
       (con->not_first ? 'E' : 'O') : (con->not_first ? 'C' : 'S');
 
-  ulong2bytes(con->ident_len, ilen);
-  ulong2bytes(con->buf_length, rlen);
-  ulong2bytes(record_number, recnum);
-  md5_init_ctx(&hash);
-  set_iov(iov+0, type, 1, &hash);
-  set_iov(iov+1, recnum, 4, &hash);
-  set_iov(iov+2, ilen, 4, &hash);
-  set_iov(iov+3, rlen, 4, &hash);
-  set_iov(iov+4, con->ident, con->ident_len, &hash);
-  set_iov(iov+5, con->buf, con->buf_length, &hash);
-  md5_finish_ctx(&hash, hashbytes);
-  iov[6].iov_base = hashbytes;
-  iov[6].iov_len = 16;
+  hdr[0] = type;
+  ulong2bytes(record_number, hdr+1);
+  ulong2bytes(con->ident_len, hdr+5);
+  ulong2bytes(con->buf_length, hdr+9);
+  hash_init(&hash);
+  set_iov(iov+0, hdr, sizeof hdr, &hash);
+  set_iov(iov+1, con->ident, con->ident_len, &hash);
+  set_iov(iov+2, con->buf, con->buf_length, &hash);
+  hash_finish(&hash, hashbytes);
+  iov[3].iov_base = hashbytes;
+  iov[3].iov_len = HASH_SIZE;
   
   if (opt_twopass && !saved_type) {
-    saved_type = type[0];
-    type[0] = 0;
+    saved_type = type;
+    type = 0;
   }
 
-  reclen = 1+4+4+4+con->ident_len+con->buf_length+16;
+  reclen = sizeof hdr + con->ident_len + con->buf_length + HASH_SIZE;
   if (journal_size+reclen >= opt_maxsize)
     if (!open_journal()) return 0;
   
-  if ((wr = writev(fdout, iov, 7)) != reclen) return 0;
+  if ((wr = writev(fdout, iov, 4)) != reclen) return 0;
   journal_size += reclen;
   transaction_size += reclen;
   record_number++;
