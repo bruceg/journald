@@ -15,6 +15,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -39,6 +40,16 @@ static void ulong2bytes(unsigned long v, char bytes[4])
   bytes[2] = v & 0xff; v >>= 8;
   bytes[1] = v & 0xff; v >>= 8;
   bytes[0] = v;
+}
+
+static int fsynccwd(void)
+{
+  int fd;
+  int res;
+  if ((fd = open(".", O_RDONLY)) == -1) return 0;
+  res = !(fsync(fd) == -1 && errno == EIO);
+  close(fd);
+  return res;
 }
 
 int rotate_journal(void)
@@ -66,6 +77,7 @@ int rotate_journal(void)
   if (link("current", ptr)) return 0;
   if (unlink("current")) return 0;
   ++file_nr;
+  if (!fsynccwd()) return 0;
   return 1;
 }
 
@@ -76,6 +88,7 @@ int open_journal(void)
     if (!rotate_journal()) return 0;
   fdout = open("current", O_WRONLY|O_CREAT|O_TRUNC, 0644);
   if (fdout == -1) return 0;
+  if (!fsynccwd()) return 0;
   ulong2bytes(file_nr, header+12);
   if (write(fdout, header, sizeof header) != sizeof header) {
     close(fdout);
