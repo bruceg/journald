@@ -1,0 +1,13 @@
+- Handle output file size limits and file rotation in journal_output.c
+
+- Write journal_dump program:
+  - Loads in the directory listing of the journal directory
+  - Reads in each file
+  - Outputs a formatted text description of each record in the file
+  - Optionally waits for new records to be output to the "current" file
+
+- Make the sync timing intelligent in order to batch transactions.
+
+- Rewrite the state machine in journal_input.c to handle multiple bytes
+  at once, for efficiency during long block reads.
+
