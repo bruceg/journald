@@ -133,16 +133,8 @@ static void handle_record(char type, unsigned long strnum,
   }
   else if (type == 'I') {
     offset = bytes2ulong(buf);
-    if (h) {
-      // FIXME: is it possible for the stream to already exist?
-      if (offset != h->offset) {
-	MSG3("Bad offset value for stream #%lu, dropping stream\n"
-	     "  Offset was %lu, should be %lu\n", h->strnum,
-	     offset, h->offset);
-	abort_stream(h);
-	del_stream(h);
-      }
-    }
+    if (h)
+      MSG1("Ident record for existing stream %lu, ignoring", strnum);
     else {
       MSG3("Start stream #%lu at record %lu offset %lu",
 	   strnum, recnum, offset);
