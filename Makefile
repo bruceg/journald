@@ -2,7 +2,7 @@ PACKAGE = journald
 VERSION = 0.1
 
 CC = gcc
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g -O
 
 LD = $(CC)
 LDFLAGS = $(CFLAGS)
