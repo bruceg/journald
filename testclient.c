@@ -11,7 +11,7 @@ int main(int argc, char* argv[])
   j = journald_open(argv[1], argv[2]);
   if (!j) return 2;
   for(;;) {
-    rd = read(0, buf, 4096);
+    rd = read(0, buf, sizeof buf);
     if (rd == -1) return 3;
     if (!rd) break;
     if (!journald_write(j, buf, rd)) return 4;
