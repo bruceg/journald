@@ -27,18 +27,18 @@ static unsigned opt_verbose = 0;
 static unsigned opt_delete = 1;
 static unsigned opt_connections = 10;
 static const char* opt_socket;
-static const char* opt_journal;
 static uid_t opt_uid = -1;
 static gid_t opt_gid = -1;
 static mode_t opt_umask = 0;
 static int opt_backlog = 128;
+
 int opt_twopass = 1;
 unsigned long opt_maxsize = 1000000;
 
 static connection* connections;
 
 static const char* usage_str =
-"usage: %s [options] socket journal-file\n"
+"usage: %s [options] socket journal-dir\n"
 "  -u UID       Change user id to UID after creating socket.\n"
 "  -g GID       Change group id to GID after creating socket.\n"
 "  -U           Same as '-u $UID -g $GID'.\n"
@@ -148,7 +148,7 @@ void parse_options(int argc, char* argv[])
   argv += optind;
   if (argc != 2) usage(0);
   opt_socket = argv[0];
-  opt_journal = argv[1];
+  if (chdir(argv[1])) usage("Could not change directory.");
 }
 
 int make_socket()
@@ -270,7 +270,7 @@ int main(int argc, char* argv[])
   signal(SIGHUP, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
   signal(SIGALRM, SIG_IGN);
-  if (!open_journal(opt_journal)) return 1;
+  if (!open_journal()) return 1;
   s = make_socket();
   log_status();
   for(;;)

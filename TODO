@@ -1,5 +1,3 @@
-- Handle output file size limits and file rotation in journal_output.c
-
 - Write journal_dump program:
   - Loads in the directory listing of the journal directory
   - Reads in each file

@@ -24,6 +24,7 @@ Record Format:
   E == end of the records for the given ID
   C == continued data for the given ID
   A == abort record
+- Record number
 - Record ID length
 - Record data length
 - Record ID
@@ -31,11 +32,15 @@ Record Format:
 - A 32-bit CRC on all the data from the non-zero value of the record
   type flag to the last byte of the record data.
 
-- All record types may contain data.
+- All record types (except "A") may contain data.
 
 - The first record in a transaction is initially marked with a NUL
   record type, which is restored after the rest of the data is sync'ed
-  to disk.
+  to disk (two-pass algorithm).
+
+- The record number is a sequential marker that starts at zero when the
+  server starts up, and may not be zero for the first record in the
+  file.
 
 - Possible sequences of record types:
   O
