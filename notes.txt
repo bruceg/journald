@@ -9,42 +9,18 @@ Journalling daemon
 - Writes past the end of the journal cause a new journal file to be
   created.
 
-Per-record journal strategy:
-- read in a block of data
-- write out data with dummy start control block
-- write out end control block
-- sync journal
-- fixup start control block prefix
-- write out start control block
-- sync journal
-
-Socket protocol:
-- Server sends an identifier code to the client.
-- Client sends a series of non-zero length netstrings.
-- Client sends a zero-length netstring.
-- Server sends an acknowledgement code and closes the socket.
-
-Client requirements:
-- Client must write data to a permanent store as well as the journal.
-
-Journal reader:
-- For each valid bundle in the journal:
-  - For each record started in this bundle:
-    - Search for its end marker
-    - If no end marker is found, ignore the record
-    - Start a subprocess for this record, with the record ID and start
-      offset as command-line arguments
-  - For each record in this bundle:
-    - Pipe the data for that record to the associated subprocess
-  - For each record ended in this bundle:
-    - Close the pipe and wait for the process to exit
-- Optimizations:
-  - pre-read in all the bundle headers
-
 Design Decisions:
 
 - Use MD4 as a block check code:
-  - Is faster (!) than CRC on P2/P3/Celeron CPUs
-  - Offers more bits of protection than CRC
+  - Is faster (!) than even a hand-tuned CRC on P2/P3/Celeron CPUs
+  - Offers more bits of protection than CRC, thus making it more likely
+    to catch partially-written or corrupted data.
   - Even though there are cryptographic attacks against it, we don't use
     it for that purpose.
+
+- Include stream identifier meta-data with the stream
+
+- Delay committing transactions for a fraction of a second
+
+- Uniform length-prefixed string format
+
