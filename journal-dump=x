@@ -1,5 +1,6 @@
 reader.o
 crc64.o
+-lcli/cli
 -lmsg/msg
 -liobuf/iobuf
 -lstr/str

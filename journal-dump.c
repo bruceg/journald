@@ -18,11 +18,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <cli/cli.h>
 #include <iobuf/iobuf.h>
 
 #include "reader.h"
 
 const char program[] = "journal-dump";
+const char cli_help_prefix[] = "Dumps the low-level contents of a journal\n";
+const char cli_help_suffix[] = "";
+const char cli_args_usage[] = "filename";
+const int cli_args_min = 1;
+const int cli_args_max = 1;
+cli_option cli_options[] = {
+  {0,0,0,0,0,0,0}
+};
 
 static void obuf_putstream(obuf* out, const stream* s, const char* end)
 {
@@ -60,21 +69,4 @@ void append_stream(stream* s, const char* buf, unsigned long reclen)
   obuf_putstream(&outbuf, s, "append bytes ");
   obuf_putu(&outbuf, reclen);
   obuf_putc(&outbuf, LF);
-}
-
-static void usage(const char* msg)
-{
-  if (msg)
-    obuf_put4s(&errbuf, program, ": ", msg, "\n");
-  obuf_put3s(&errbuf, "usage: ", program, " filename\n");
-  obuf_flush(&errbuf);
-  exit(1);
-}
-
-int main(int argc, char* argv[])
-{
-  if (argc != 2) usage(0);
-  read_journal(argv[1]);
-  obuf_flush(&outbuf);
-  return 0;
 }

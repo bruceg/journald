@@ -23,6 +23,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cli/cli.h>
 #include <iobuf/iobuf.h>
 #include <msg/msg.h>
 #include <str/str.h>
@@ -44,6 +45,9 @@
 #endif
 
 const int msg_show_pid = 0;
+
+int reader_argc;
+char** reader_argv;
 
 static stream* streams;
 static unsigned long pagesize;
@@ -248,4 +252,14 @@ void read_journal(const char* filename)
   for (h = streams; h; h = h->next)
     printf("%s: Stream #%lu ID '%s' had no end marker\n",
 	   program, h->strnum, h->ident);
+}
+
+
+int cli_main(int argc, char* argv[])
+{
+  reader_argc = argc - 1;
+  reader_argv = argv + 1;
+  read_journal(argv[0]);
+  obuf_flush(&outbuf);
+  return 0;
 }

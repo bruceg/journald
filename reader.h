@@ -3,6 +3,9 @@
 
 extern const char program[];
 
+extern int reader_argc;
+extern char** reader_argv;
+
 struct stream
 {
   unsigned long strnum;

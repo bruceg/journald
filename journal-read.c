@@ -1,4 +1,4 @@
-/* journal-read.c - Dump the contents of journal directories.
+/* journal-read.c - Process a journal
    Copyright (C) 2000,2002 Bruce Guenter
 
    This program is free software; you can redistribute it and/or modify
@@ -16,19 +16,28 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 #include <fcntl.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <dirent.h>
 #include <unistd.h>
 
+#include <cli/cli.h>
 #include <msg/msg.h>
 
 #include "reader.h"
 
-static int opt_argc;
-static char** opt_argv;
+static char** argv = 0;
+
+const char program[] = "journal-read";
+const char cli_help_prefix[] = "Sends journal streams through a program\n";
+const char cli_help_suffix[] = "";
+const char cli_args_usage[] = "filename program [args ...]";
+const int cli_args_min = 2;
+const int cli_args_max = -1;
+cli_option cli_options[] = {
+  {0,0,0,0,0,0,0}
+};
 
 static char* ulongtoa(unsigned long i)
 {
@@ -44,7 +53,14 @@ static char* ulongtoa(unsigned long i)
   return ptr+1;
 }
 
-const char program[] = "journal-read";
+void copy_argv(void)
+{
+  int i;
+  if ((argv = malloc(sizeof *argv * (reader_argc+3))) == 0)
+    die1(1, "Out of memory");
+  for (i = 0; i < reader_argc; i++)
+    argv[i] = reader_argv[i];
+}
 
 void end_stream(stream* s)
 {
@@ -52,20 +68,21 @@ void end_stream(stream* s)
   int fd;
   
   fd = *(int*)(s->data);
-  
-  if (lseek(fd, 0, SEEK_SET) != 0) die1sys(1, "lseek");
-  if ((pid = fork()) == -1) die1sys(1, "fork");
+
+  if (!argv) copy_argv();
+  if (lseek(fd, 0, SEEK_SET) != 0) die1sys(1, "lseek failed");
+  if ((pid = fork()) == -1) die1sys(1, "fork failed");
   if (!pid) {
     close(0);
     dup2(fd, 0);
     close(fd);
-    opt_argv[opt_argc+0] = s->ident;
-    opt_argv[opt_argc+1] = ulongtoa(s->start_offset);
-    opt_argv[opt_argc+2] = 0;
-    execvp(opt_argv[0], opt_argv);
-    die1sys(1, "exec");
+    argv[reader_argc+0] = s->ident;
+    argv[reader_argc+1] = ulongtoa(s->start_offset);
+    argv[reader_argc+2] = 0;
+    execvp(argv[0], argv);
+    die1sys(1, "exec failed");
   }
-  if (waitpid(pid, 0, WUNTRACED) != pid) die1sys(1, "waitpid");
+  if (waitpid(pid, 0, WUNTRACED) != pid) die1sys(1, "waitpid failed");
   close(fd);
   free(s->data);
 }
@@ -81,8 +98,8 @@ void init_stream(stream* s)
 {
   char filename[] = "journal-read.tmp.XXXXXX";
   int fd;
-  if ((fd = mkstemp(filename)) == -1) die1sys(1, "mkstemp");
-  if (unlink(filename)) die1sys(1, "unlink");
+  if ((fd = mkstemp(filename)) == -1) die1sys(1, "mkstemp failed");
+  if (unlink(filename)) die1sys(1, "unlink failed");
   s->data = malloc(sizeof(int));
   *(int*)(s->data) = fd;
 }
@@ -91,26 +108,6 @@ void append_stream(stream* s, const char* buf, unsigned long reclen)
 {
   int fd;
   fd = *(int*)(s->data);
-  if (write(fd, buf, reclen) != reclen)
-    die1sys(1, "write to temporary file");
-}
-
-static void usage(const char* msg)
-{
-  if (msg)
-    fprintf(stderr, "%s: %s\n", program, msg);
-  fprintf(stderr, "usage: %s filename program [args ...]\n", program);
-  exit(1);
-}
-
-int main(int argc, char* argv[])
-{
-  int i;
-  if (argc < 3) usage("Too few command-line arguments");
-  opt_argc = argc - 2;
-  opt_argv = malloc(sizeof(char*) * (opt_argc+3));
-  for (i = 0; i < opt_argc; i++)
-    opt_argv[i] = argv[i+2];
-  read_journal(argv[1]);
-  return 0;
+  if ((unsigned long)write(fd, buf, reclen) != reclen)
+    die1sys(1, "write to temporary file failed");
 }
