@@ -25,6 +25,7 @@
 
 #include <iobuf/iobuf.h>
 #include <msg/msg.h>
+#include <str/str.h>
 
 #include "flags.h"
 #include "hash.h"
@@ -97,18 +98,6 @@ static void del_stream(stream* find)
   }
 }
 
-static char* alloc_buffer(unsigned long size)
-{
-  static char* buf = 0;
-  static unsigned long prev_size = 0;
-  if (size >= prev_size) {
-    if (buf) free(buf);
-    buf = malloc(size);
-    prev_size = size;
-  }
-  return buf;
-}
-
 static void handle_record(unsigned long typeflags, unsigned long strnum,
 			  unsigned long recnum, unsigned long reclen,
 			  const char* buf)
@@ -176,7 +165,7 @@ static int read_record(unsigned char header[HEADER_SIZE], ibuf* in)
   unsigned long reclen;
   unsigned long typeflags;
   unsigned char* hdrptr;
-  char* buf;
+  static str buf;
 
   hdrptr = header;
   typeflags = bytes2ulong(hdrptr); hdrptr += 4;
@@ -186,17 +175,17 @@ static int read_record(unsigned char header[HEADER_SIZE], ibuf* in)
   strnum = bytes2ulong(hdrptr); hdrptr += 4;
   recnum = bytes2ulong(hdrptr); hdrptr += 4;
   reclen = bytes2ulong(hdrptr);
-  buf = alloc_buffer(reclen+HASH_SIZE);
-  if (!ibuf_read(in, buf, reclen+HASH_SIZE))
+  str_ready(&buf, reclen+HASH_SIZE);
+  if (!ibuf_read(in, buf.s, reclen+HASH_SIZE))
     FAIL("Could not read record data.");
   hash_init(&hash);
   hash_update(&hash, header, HEADER_SIZE);
-  hash_update(&hash, buf, reclen);
+  hash_update(&hash, buf.s, reclen);
   hash_finish(&hash, hcmp);
-  if (memcmp(buf+reclen, hcmp, HASH_SIZE))
+  if (memcmp(buf.s+reclen, hcmp, HASH_SIZE))
     FAIL("Record data was corrupted.");
 
-  handle_record(typeflags, strnum, recnum, reclen, buf);
+  handle_record(typeflags, strnum, recnum, reclen, buf.s);
   global_recnum++;
   return 1;
 }
