@@ -75,7 +75,7 @@ static int read_record(connection* con, char byte)
   return 3;
 }
 
-void handle_data(connection* con, char* data, long size)
+void handle_data(connection* con, char* data, unsigned long size)
 {
   int state;
   if (!size) {

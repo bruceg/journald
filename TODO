@@ -11,3 +11,6 @@
 - Rewrite the state machine in journal_input.c to handle multiple bytes
   at once, for efficiency during long block reads.
 
+- Check out fingerprinting code at
+  http://gcc.gnu.org/ml/gcc/1999-11n/msg00592.html
+

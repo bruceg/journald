@@ -8,8 +8,6 @@
 static int fdout = -1;
 static const char header[16] = "journald" "\0\0\0\1" "\0\0\0\0";
 
-extern int opt_twopass;
-
 int open_journal(const char* path)
 {
   if (chdir(path)) return 0;
@@ -30,7 +28,8 @@ static void ulong2bytes(unsigned long v, char bytes[4])
   bytes[0] = v;
 }
 
-static CRC32 set_iov(struct iovec* iov, char* data, long size, CRC32 crc)
+static CRC32 set_iov(struct iovec* iov, char* data, unsigned long size,
+		     CRC32 crc)
 {
   iov->iov_base = data;
   iov->iov_len = size;
@@ -38,7 +37,7 @@ static CRC32 set_iov(struct iovec* iov, char* data, long size, CRC32 crc)
 }
 
 static char saved_type = 0;
-static long bytes_written = 0;
+static unsigned long bytes_written = 0;
 
 int write_record(connection* con, int final, int abort)
 {
@@ -48,7 +47,7 @@ int write_record(connection* con, int final, int abort)
   unsigned char rlen[4];
   unsigned char crcbytes[4];
   CRC32 crc;
-  long wr;
+  unsigned long wr;
   
   if (abort) {
     con->buf_length = 0;

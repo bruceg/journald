@@ -33,6 +33,7 @@ static gid_t opt_gid = -1;
 static mode_t opt_umask = 0;
 static int opt_backlog = 128;
 int opt_twopass = 1;
+unsigned long opt_maxsize = 1000000;
 
 static connection* connections;
 
@@ -48,7 +49,8 @@ static const char* usage_str =
 "  -b N         Allow a backlog of N connections.\n"
 "  -1           Single-pass transaction commit.\n"
 "  -2           Re-write the type flag to commit a transaction.\n"
-"               (default, slower, but guarantees consistency)\n";
+"               (default, slower, but guarantees consistency)\n"
+"  -x N         Maximum journal file size, in bytes. (default 1000000)\n";
 
 void usage(const char* message)
 {
@@ -107,10 +109,14 @@ void parse_options(int argc, char* argv[])
   int opt;
   char* ptr;
   argv0 = argv[0];
-  while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:")) != EOF) {
+  while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:x:")) != EOF) {
     switch(opt) {
     case '1': opt_twopass = 0; break;
     case '2': opt_twopass = 1; break;
+    case 'x':
+      opt_maxsize = strtoul(optarg, &ptr, 10);
+      if (*ptr != 0) usage("Invalid maximum size.");
+      break;
     case 'q': opt_quiet = 1; opt_verbose = 0; break;
     case 'Q': opt_quiet = 0; break;
     case 'v': opt_quiet = 0; opt_verbose = 1; break;
@@ -167,10 +173,10 @@ int make_socket()
 
 void handle_connection(connection* con)
 {
-  char buf[4096];
-  long rd;
+  static char buf[4096];
+  unsigned long rd;
   rd = read(con->fd, buf, sizeof buf);
-  if (!rd || rd == -1) {
+  if (!rd || rd == (unsigned long)-1) {
     write_record(con, 0, 1);
     con->state = -1;
   }
@@ -215,9 +221,9 @@ void accept_connection(int s)
 
 void do_select(int s)
 {
+  static fd_set rfds;
   int fdmax;
   int fd;
-  fd_set rfds;
   int i;
   
   fdmax = -1;

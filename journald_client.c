@@ -13,9 +13,9 @@
 
 static int jflush(journald_client* j)
 {
-  long length;
+  unsigned long length;
   char* ptr;
-  long wr;
+  unsigned long wr;
   length = j->bufpos;
   ptr = j->buf;
   while (length > 0) {
@@ -30,7 +30,7 @@ static int jflush(journald_client* j)
 
 static int jwrite(journald_client* j, const char* data, unsigned long size)
 {
-  long length;
+  unsigned long length;
   while (size + j->bufpos >= JOURNALD_BUFSIZE) {
     length = JOURNALD_BUFSIZE - j->bufpos;
     memcpy(j->buf+j->bufpos, data, length);
