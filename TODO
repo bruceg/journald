@@ -1,11 +1,7 @@
-- Modify journal_read to verify that the value of recnum is sequential.
-
-- Modify journal_read to write data from transactions to (invisible)
-  temporary files, and spawn the processes with these files as standard
-  input only after the end of the transaction could be read.
+- Modify the file format to align transaction starts on block boundaries.
 
 - Modify journal_read to wait for new records to be output to the
   "current" file.
 
-- Modify the file format to align transaction starts on block boundaries.
+- Modify journal_read to verify that the value of recnum is sequential.
 
