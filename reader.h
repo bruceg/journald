@@ -1,6 +1,8 @@
 #ifndef JOURNALD__READER__H__
 #define JOURNALD__READER__H__
 
+#define DEBUG_JOURNAL 1
+
 extern const char program[];
 
 extern int reader_argc;

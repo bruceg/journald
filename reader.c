@@ -16,7 +16,6 @@
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 #include <fcntl.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -31,18 +30,6 @@
 #include "flags.h"
 #include "hash.h"
 #include "reader.h"
-
-#if JOURNAL_DEBUG
-#define MSG0(S) do{ printf("%s: %s\n", program, S); }while(0)
-#define MSG1(S,A) do{ printf("%s: " S "\n", program, A); }while(0)
-#define MSG2(S,A,B) do{ printf("%s: " S "\n", program, A, B); }while(0)
-#define MSG3(S,A,B,C) do{ printf("%s: " S "\n", program, A, B, C); }while(0)
-#else
-#define MSG0(S) do{ }while(0)
-#define MSG1(S,A) do{ }while(0)
-#define MSG2(S,A,B) do{ }while(0)
-#define MSG3(S,A,B,C) do{ }while(0)
-#endif
 
 const int msg_show_pid = 0;
 
@@ -102,18 +89,27 @@ static void del_stream(stream* find)
   }
 }
 
+void str_copyu(str* s, unsigned long u)
+{
+  str_truncate(s, 0) && str_catu(s, u);
+}
+
 static void handle_record(unsigned long typeflags, unsigned long strnum,
 			  unsigned long recnum, unsigned long reclen,
 			  const char* buf)
 {
   stream* h;
   unsigned long offset;
+  static str srecnum;
+  static str sstrnum;
+  static str soffset;
 
+  str_copyu(&srecnum, recnum);
+  str_copyu(&sstrnum, strnum);
   if ((h = find_stream(strnum)) != 0) {
+    str_copyu(&soffset, h->offset);
     if (recnum != h->recnum) {
-      MSG3("Bad record number for stream #%lu, dropping stream\n"
-	   "  Offset was %lu, should be %lu\n", h->strnum,
-	   recnum, h->recnum);
+      warn3("Bad record number for stream #", sstrnum.s, ", dropping stream");
       abort_stream(h);
       del_stream(h);
       return;
@@ -121,6 +117,8 @@ static void handle_record(unsigned long typeflags, unsigned long strnum,
   }
   if (typeflags & RECORD_ABORT) {
     if (h) {
+      debug6(DEBUG_JOURNAL, "Abort stream #", sstrnum.s,
+	     " at record ", srecnum.s, " offset ", soffset.s);
       abort_stream(h);
       del_stream(h);
     }
@@ -128,39 +126,40 @@ static void handle_record(unsigned long typeflags, unsigned long strnum,
   else if (typeflags & RECORD_INFO) {
     offset = bytes2ulong(buf);
     if (h)
-      MSG1("Info record for existing stream %lu, ignoring", strnum);
+      warn3("Info record for existing stream #", sstrnum.s, ", ignoring");
     else {
-      MSG3("Start stream #%lu at record %lu offset %lu",
-	   strnum, recnum, offset);
+      debug6(DEBUG_JOURNAL, "Start stream #", sstrnum.s,
+	     " at record ", srecnum.s, " offset ", soffset.s);
       new_stream(strnum, recnum, offset, (char*)buf+4, reclen-4);
     }
   }
   else {
     if (typeflags & RECORD_DATA) {
       if (h) {
+	debug6(DEBUG_JOURNAL, "Append stream #", sstrnum.s,
+	       " record ", srecnum.s, " offset ", soffset.s);
 	append_stream(h, buf, reclen);
 	h->offset += reclen;
 	h->recnum ++;
       }
       else
-	MSG1("Data record for nonexistant stream #%lu", strnum);
+	warn2("Data record for nonexistant stream #", sstrnum.s);
     }
     if (typeflags & RECORD_EOS) {
       if (h) {
-	MSG2("End stream #%lu at offset %lu", strnum, h->offset);
+	debug6(DEBUG_JOURNAL, "End stream #", sstrnum.s,
+	       " at record ", srecnum.s, " offset ", soffset.s);
 	end_stream(h);
 	del_stream(h);
       }
       else
-	MSG1("End record for nonexistant stream #%lu\n", strnum);
+	warn2("End record for nonexistant stream #", sstrnum.s);
     }
   }
 }
 
 static int read_record(unsigned char header[HEADER_SIZE], ibuf* in)
 {
-#undef FAIL
-#define FAIL(MSG) do{ error1(MSG); return 0; }while(0)
   static char hcmp[HASH_SIZE];
   static HASH_CTX hash;
   unsigned long strnum;
@@ -175,19 +174,19 @@ static int read_record(unsigned char header[HEADER_SIZE], ibuf* in)
   typeflags = bytes2ulong(hdrptr); hdrptr += 4;
   grecnum = bytes2ulong(hdrptr); hdrptr += 4;
   if (grecnum != global_recnum)
-    FAIL("Global record number mismatch.");
+    die1(1, "Global record number mismatch.");
   strnum = bytes2ulong(hdrptr); hdrptr += 4;
   recnum = bytes2ulong(hdrptr); hdrptr += 4;
   reclen = bytes2ulong(hdrptr);
   str_ready(&buf, reclen+HASH_SIZE);
   if (!ibuf_read(in, buf.s, reclen+HASH_SIZE))
-    FAIL("Could not read record data.");
+    die1sys(1, "Could not read record data.");
   hash_init(&hash);
   hash_update(&hash, header, HEADER_SIZE);
   hash_update(&hash, buf.s, reclen);
   hash_finish(&hash, hcmp);
   if (memcmp(buf.s+reclen, hcmp, HASH_SIZE))
-    FAIL("Record data was corrupted.");
+    die1(1, "Record data was corrupted (check code mismatch).");
 
   handle_record(typeflags, strnum, recnum, reclen, buf.s);
   global_recnum++;
@@ -215,43 +214,45 @@ static int read_transaction(ibuf* in)
 
 void read_journal(const char* filename)
 {
-#undef FAIL
-#define FAIL(MSG) do{fprintf(stderr,"%s: " MSG ", skipping\n", program, filename);return;}while(0)
   stream* h;
   char header[8+4+4+4+4+HASH_SIZE];
   char hashbuf[HASH_SIZE];
   HASH_CTX hash;
   ibuf in;
 
-  if (!ibuf_open(&in, filename, 0)) FAIL("Could not open '%s'");
+  if (!ibuf_open(&in, filename, 0))
+    die3sys(1, "Could not open '", filename, "'");
 
   /* Read/validate header record */
   hash_init(&hash);
   if (!ibuf_read(&in, header, sizeof header))
-    FAIL("Could not read header from '%s'");
+    die3sys(1, "Could not read header from '", filename, "'");
   hash_update(&hash, header, sizeof header - HASH_SIZE);
-  if (memcmp(header, "journald", 8) != 0)
-    FAIL("'%s' is not a journald file");
-  if (bytes2ulong(header+8) != 2)
-    FAIL("'%s' is not a version 2 journald file");
-  if ((pagesize = bytes2ulong(header+12)) == 0)
-    FAIL("'%s' has zero page size");
-  global_recnum = bytes2ulong(header+16);
-  if (bytes2ulong(header+20) != 0)
-    FAIL("'%s' has non-zero options length");
   hash_finish(&hash, hashbuf);
   if (memcmp(header + 24, hashbuf, HASH_SIZE) != 0)
-    FAIL("'%s' has invalid check code");
+    die3(1, "'", filename, "' has invalid header check code");
+  if (memcmp(header, "journald", 8) != 0)
+    die3(1, "'", filename, "' is not a journald file (missing signature)");
+  if (bytes2ulong(header+8) != 2)
+    die3(1, "'", filename, "' is not a version 2 journald file");
+  if ((pagesize = bytes2ulong(header+12)) == 0)
+    die3(1, "'", filename, "' has zero page size");
+  global_recnum = bytes2ulong(header+16);
+  if (bytes2ulong(header+20) != 0)
+    die3(1, "'", filename, "' has non-zero options length, can't handle it");
   
-  if (!skip_page(&in)) FAIL("Could not skip first page of '%s'");
-  MSG1("Start file '%s'", filename);
+  if (!skip_page(&in))
+    die3sys(1, "Could not skip first page of '", filename, "'");
+
   while (read_transaction(&in))
     ;
   ibuf_close(&in);
-  MSG1("End file '%s'", filename);
-  for (h = streams; h; h = h->next)
-    printf("%s: Stream #%lu ID '%s' had no end marker\n",
-	   program, h->strnum, h->ident);
+
+  if (streams) {
+    warn3("Premature end of data in journal '", filename, "'");
+    for (h = streams; h != 0; h = h->next)
+      abort_stream(h);
+  }
 }
 
 

@@ -35,7 +35,10 @@ const char cli_help_suffix[] = "";
 const char cli_args_usage[] = "filename program [args ...]";
 const int cli_args_min = 2;
 const int cli_args_max = -1;
+int msg_debug_bits;
 cli_option cli_options[] = {
+  { 'd', "debug", CLI_FLAG, DEBUG_JOURNAL, &msg_debug_bits,
+    "Turn on some debugging messages", 0 },
   {0,0,0,0,0,0,0}
 };
 
