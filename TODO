@@ -1,3 +1,5 @@
+- Restore operation of two-pass mode.
+
 - Set up a conf-writer switch to build a single journald binary from the
   three possibilities.
 
