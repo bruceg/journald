@@ -108,6 +108,12 @@ static unsigned long read_record(connection* con,
   unsigned long use;
   used = 0;
   while (size) {
+    if (con->buf_length == CBUFSIZE) {
+      if (!write_record(con, 0, 0)) {
+	con->state = -1;
+	break;
+      }
+    }
     use = con->length - con->count;
     if (use > CBUFSIZE - con->buf_length) use = CBUFSIZE - con->buf_length;
     if (use > size) use = size;
@@ -117,12 +123,6 @@ static unsigned long read_record(connection* con,
     used += use;
     con->buf_length += use;
     con->count += use;
-    if (con->buf_length == CBUFSIZE) {
-      if (!write_record(con, 0, 0)) {
-	con->state = -1;
-	break;
-      }
-    }
     if (con->count == con->length) {
       con->count = 0;
       con->length = 0;
