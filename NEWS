@@ -1,4 +1,10 @@
 -------------------------------------------------------------------------------
+Changes in version 0.4
+
+
+Development of this version has been sponsored by FutureQuest, Inc.
+ossi@FutureQuest.net  http://www.FutureQuest.net/
+-------------------------------------------------------------------------------
 Changes in version 0.3
 
 - Modified the core logic to use only a single file (making it suitable
