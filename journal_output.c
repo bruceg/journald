@@ -157,12 +157,11 @@ int write_record(connection* con, int final, int abort)
   
   if (abort) {
     con->buf_length = 0;
-    if (!con->not_first) return 1;
+    if (!con->total) return 1;
     type = 'A';
   }
   else
-    type = final ?
-      (con->not_first ? 'E' : 'O') : (con->not_first ? 'C' : 'S');
+    type = final ? (con->total ? 'E' : 'O') : 'D';
 
   if (journal_size + con->buf_length >= opt_maxsize)
     if (!open_journal()) return 0;
@@ -177,7 +176,6 @@ int write_record(connection* con, int final, int abort)
   
   con->total += con->buf_length;
   con->records++;
-  con->not_first = 1;
   con->buf_length = 0;
   return 1;
 }

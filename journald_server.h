@@ -13,7 +13,6 @@ struct connection
   unsigned long length;
   unsigned long ident_len;
   unsigned long buf_length;
-  int not_first;
   int wrote_ident;
   int ok;
   unsigned long total;
