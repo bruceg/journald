@@ -1,5 +1,3 @@
-- Make the sync timing intelligent in order to batch transactions.
-
 - Modify journal_read to wait for new records to be output to the
   "current" file.
 

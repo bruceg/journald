@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -22,7 +23,9 @@ extern void setup_env(int, const char*);
 static const char* argv0;
 
 static unsigned connection_count = 0;
+static unsigned long connection_number = 0;
 
+static unsigned long opt_timeout = 10*1000;
 static unsigned opt_quiet = 0;
 static unsigned opt_verbose = 0;
 static unsigned opt_delete = 1;
@@ -51,7 +54,8 @@ static const char* usage_str =
 "  -1           Single-pass transaction commit (default).\n"
 "  -2           Re-write the type flag to commit a transaction.\n"
 "               (slower, but guarantees consistency)\n"
-"  -x N         Maximum journal file size, in bytes. (default 1000000)\n";
+"  -x N         Maximum journal file size, in bytes. (default 1000000)\n"
+"  -t N         Pause synchronization by N us. (default 10ms)\n";
 
 static void usage(const char* message)
 {
@@ -67,19 +71,24 @@ static void log_status(void)
     printf("journald: status: %d/%d\n", connection_count, opt_connections);
 }
 
-static void log_connection_exit(int slot)
+static void close_connection(connection* con)
 {
+  close(con->fd);
+  --connection_count;
+  con->fd = 0;
   if (opt_verbose)
-    printf("journald: end %d bytes %ld records %ld %s\n", slot,
-	   connections[slot].total, connections[slot].records,
-	   connections[slot].ok ? "OK" : "Aborted");
+    printf("journald: end #%lu bytes %ld records %ld %s\n", con->number,
+	   con->total, con->records, con->ok ? "OK" : "Aborted");
   log_status();
 }
 
-static void log_connection_start(int slot)
+static void open_connection(connection* con, int fd)
 {
+  memset(con, 0, sizeof(connection));
+  con->fd = fd;
+  con->number = connection_number++;
   if (opt_verbose)
-    printf("journald: start %d\n", slot);
+    printf("journald: start #%lu\n", con->number);
 }
 
 void die(const char* msg)
@@ -110,13 +119,17 @@ static void parse_options(int argc, char* argv[])
   int opt;
   char* ptr;
   argv0 = argv[0];
-  while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:x:")) != EOF) {
+  while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:t:x:")) != EOF) {
     switch(opt) {
     case '1': opt_twopass = 0; break;
     case '2': opt_twopass = 1; break;
     case 'x':
       opt_maxsize = strtoul(optarg, &ptr, 10);
       if (*ptr != 0) usage("Invalid maximum size.");
+      break;
+    case 't':
+      opt_timeout = strtol(optarg, &ptr, 10);
+      if (*ptr != 0 || opt_timeout >= 1000000) usage("Invalid timeout.");
       break;
     case 'q': opt_quiet = 1; opt_verbose = 0; break;
     case 'Q': opt_quiet = 0; break;
@@ -183,6 +196,26 @@ static int make_socket()
   return s;
 }
 
+static int needs_sync;
+
+static void do_sync(void) 
+{
+  int ok;
+  connection* last_connection;
+  connection* con;
+  static char buf[1];
+
+  last_connection = connections + opt_connections;
+  ok = sync_records();
+  for (con = connections; con < last_connection; con++) {
+    if (con->fd && con->state == -1) {
+      buf[0] = con->ok && ok;
+      write(con->fd, buf, 1);
+      close_connection(con);
+    }
+  }
+}
+
 static void handle_connection(connection* con)
 {
   static char buf[4096];
@@ -195,15 +228,10 @@ static void handle_connection(connection* con)
   else
     handle_data(con, buf, rd);
   if(con->state == -1) {
-    if (con->ok) {
-      if (!sync_records()) con->ok = 0;
-      buf[0] = con->ok;
-      write(con->fd, buf, 1);
-    }
-    close(con->fd);
-    --connection_count;
-    log_connection_exit(con-connections);
-    con->fd = 0;
+    if (con->ok)
+      needs_sync = 1;
+    else
+      close_connection(con);
   }
 }
 
@@ -223,9 +251,7 @@ static void accept_connection(int s)
 
   for (i = 0; i < opt_connections; i++) {
     if (!connections[i].fd) {
-      memset(connections+i, 0, sizeof(connection));
-      connections[i].fd = fd;
-      log_connection_start(i);
+      open_connection(connections+i, fd);
       return;
     }
   }
@@ -237,7 +263,28 @@ static void do_select(int s)
   int fdmax;
   int fd;
   int i;
-  
+  static struct timeval timeout = {0,0};
+  static struct timeval sync_time;
+  struct timeval* timeptr;
+
+  /* If a sync point is needed, determine the end time when the sync
+     will actually happen. */
+  if (needs_sync) {
+    timeptr = &timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = opt_timeout;
+    if (sync_time.tv_sec == 0) {
+      gettimeofday(&sync_time, 0);
+      sync_time.tv_usec += opt_timeout;
+      if (sync_time.tv_usec >= 1000000) {
+	sync_time.tv_usec -= 1000000;
+	sync_time.tv_sec--;
+      }
+    }
+  }
+  else
+    timeptr = 0;
+
   fdmax = -1;
   FD_ZERO(&rfds);
   if (connection_count < opt_connections) {
@@ -251,16 +298,34 @@ static void do_select(int s)
       if (fd > fdmax) fdmax = fd;
     }
   }
-  while ((fd = select(fdmax+1, &rfds, 0, 0, 0)) == -1) {
-    if (errno == EINTR) continue;
-    die("select");
+  while ((fd = select(fdmax+1, &rfds, 0, 0, timeptr)) == -1) {
+    if (errno != EINTR) die("select");
+    if (needs_sync) timeout.tv_usec = opt_timeout;
   }
-  if (FD_ISSET(s, &rfds))
-    accept_connection(s);
-  for (i = 0; i < opt_connections; i++) {
-    fd = connections[i].fd;
-    if (FD_ISSET(connections[i].fd, &rfds))
-      handle_connection(connections+i);
+  if (needs_sync) {
+    /* Do the sync if the select either timed out, or if the end time
+       has been passed. */
+    if (!fd) {
+      do_sync();
+      needs_sync = sync_time.tv_sec = sync_time.tv_usec = 0;
+    }
+    else {
+      gettimeofday(&timeout, 0);
+      if (timeout.tv_sec > sync_time.tv_sec ||
+	  timeout.tv_usec > sync_time.tv_usec) {
+	do_sync();
+	needs_sync = sync_time.tv_sec = sync_time.tv_usec = 0;
+      }
+    }
+  }
+  if (fd) {
+    if (FD_ISSET(s, &rfds))
+      accept_connection(s);
+    for (i = 0; i < opt_connections; i++) {
+      fd = connections[i].fd;
+      if (FD_ISSET(connections[i].fd, &rfds))
+	handle_connection(connections+i);
+    }
   }
 }
 
