@@ -1,6 +1,6 @@
 journald
 version 0.2
-2000-12-12
+2000-12-13
 Bruce Guenter <bruceg@em.ca>
 
 Journald is a user-space standalone generic journalling daemon.  It
@@ -8,10 +8,11 @@ reads records from multiple clients and writes them to a single journal
 in such a way that the client only sees a successful completion only
 after the journal is guaranteed to be written to disk (a transaction).
 
-This package is right now in the "proof of concept" stage.  All of the
-necessary parts are there to use it, but only in a limited capacity.
-Some of the algorithms may be flawed, and the file format is likely to
-change to accomodate block-alligned transactions.
+This package is right now in an advanced "alpha" stage.  All of the
+necessary parts are there to use it, but some are limited in their
+capacity.  The file format will change in a future version to accomodate
+block-alligned transactions, but the client-server protocol is not
+expected to change.
 
 This program is Copyright(C) 2000 Bruce Guenter, and may be copied
 according to the GNU GENERAL PUBLIC LICENSE (GPL) Version 2 or a later
