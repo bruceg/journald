@@ -1,4 +1,10 @@
-- Modify the file format to align transaction starts on block boundaries.
+- Clean up the file format and documentation.
+
+- Modify all the reader programs to deal with new file format.
+
+- Modify the file format to align transaction starts on block
+  boundaries, to avoid read-modify-write cycles on partial blocks.
+  - Use st_blksize from fstat to determine block size to use.
 
 - Modify journal-read to wait for new records to be output to the
   "current" file.
