@@ -6,12 +6,18 @@
 #include "journald.h"
 
 static int fdout = -1;
+static const char header[16] = "journald" "\0\0\0\1" "\0\0\0\0";
 
 int open_journal(const char* path)
 {
   if (chdir(path)) return 0;
   fdout = open("current", O_WRONLY|O_CREAT|O_TRUNC, 0644);
-  return fdout != -1;
+  if (fdout == -1) return 0;
+  if (write(fdout, header, sizeof header) != sizeof header) {
+    close(fdout);
+    return 0;
+  }
+  return 1;
 }
 
 static void ulong2bytes(unsigned long v, char bytes[4])

@@ -13,9 +13,8 @@
 
 File Header Format:
 - Constant string (8 bytes): "journald"
-- Version (2 bytes): "1\0"
-- Block size
-- Application name
+- Version (1)
+- File number (starts at zero)
 
 Record Format:
 - Record type (single byte):
@@ -41,7 +40,6 @@ Record Format:
 - Possible sequences of record types:
   O
   S C* E
-  A
   S C* A
 
 - Unless otherwise noted, all the above numbers are represented as a
