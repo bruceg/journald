@@ -7,6 +7,7 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "journald.h"
 
 extern void setup_env(int, const char*);
 
@@ -19,7 +20,7 @@ extern void setup_env(int, const char*);
 static const char* argv0;
 static char** command_argv;
 
-static unsigned forked = 0;
+static unsigned connection_count = 0;
 
 static unsigned opt_quiet = 0;
 static unsigned opt_verbose = 0;
@@ -30,7 +31,6 @@ static uid_t opt_uid = -1;
 static gid_t opt_gid = -1;
 static mode_t opt_umask = 0;
 static int opt_backlog = 128;
-static const char* opt_banner = 0;
 
 void usage(const char* message)
 {
@@ -42,8 +42,8 @@ void usage(const char* message)
 	  "  -U           Same as '-u $UID -g $GID'.\n"
 	  "  -m MASK      Set umask to MASK (in octal) before creating socket.\n"
 	  "               (defaults to 0)\n"
-	  //"  -c N         Do not handle more than N simultaneous connections.\n"
-	  //"               (default 10)\n"
+	  "  -c N         Do not handle more than N simultaneous connections.\n"
+	  "               (default 10)\n"
 	  "  -b N         Allow a backlog of N connections.\n", argv0);
   exit(1);
 }
@@ -51,20 +51,20 @@ void usage(const char* message)
 void log_status(void)
 {
   if(opt_verbose)
-    printf("unixserver: status: %d/%d\n", forked, opt_connections);
+    printf("journald: status: %d/%d\n", connection_count, opt_connections);
 }
 
-void log_child_exit(pid_t pid, int status)
+void log_connection_exit(pid_t pid, long bytes)
 {
   if(opt_verbose)
-    printf("unixserver: end %d status %d\n", pid, status);
+    printf("journald: end %d bytes %ld\n", pid, bytes);
   log_status();
 }
 
-void log_child_start(pid_t pid)
+void log_connection_start(pid_t pid)
 {
   if(opt_verbose)
-    printf("unixserver: pid %d\n", pid);
+    printf("journald: pid %d\n", pid);
 }
 
 void die(const char* msg)
@@ -127,7 +127,6 @@ void parse_options(int argc, char* argv[])
       if(*ptr != 0)
 	usage("Invalid backlog count.");
       break;
-    case 'B': opt_banner = optarg; break;
     default:
       usage(0);
     }
@@ -165,53 +164,45 @@ int make_socket()
   return s;
 }
 
-void handle_connection(int s)
+void handle_connection(connection* con)
+{
+  char buf[4096];
+  long rd;
+  while((rd = read(con->fd, buf, sizeof buf)) != 0) {
+    if(rd == -1)
+      die("read");
+    handle_data(con, buf, rd);
+  }
+}
+
+void accept_connection(int s)
 {
   int fd;
   pid_t pid;
+  connection con;
   do {
     fd = accept(s, NULL, NULL);
     // All the listed error return values are not possible except for
     // buggy code, so just try again if accept fails.
   } while(fd < 0);
-  ++forked;
+  ++connection_count;
   log_status();
-  pid = fork();
-  switch(pid) {
-  case -1: // Could not fork
-    close(fd);
-    perror("fork");
-    --forked;
-    log_status();
-    break;
-  case 0:
-    start_child(fd);
-    break;
-  default:
-    close(fd);
-    log_child_start(pid);
-  }
-}
+  log_connection_start(pid);
 
-void handle_children()
-{
-  pid_t pid;
-  int status;
-  while((pid = waitpid(0, &status, WNOHANG | WUNTRACED)) > 0) {
-    --forked;
-    log_child_exit(pid, status);
-  }
-  signal(SIGCHLD, handle_children);
-}
-
-void handle_child(void)
-{
-  int status;
-  pid_t pid = wait(&status);
-  if(pid == -1)
-    die("wait");
-  --forked;
-  log_child_exit(pid, status);
+  con.fd = fd;
+  con.mode = 0;
+  con.state = 0;
+  con.length = 0;
+  con.ident_len = 0;
+  con.buf_length = 0;
+  con.buf_offset = 0;
+  con.ok = 0;
+  
+  handle_connection(&con);
+  
+  close(fd);
+  --connection_count;
+  log_connection_exit(pid, 0);
 }
 
 void handle_intr()
@@ -225,7 +216,6 @@ int main(int argc, char* argv[])
 {
   int s;
   parse_options(argc, argv);
-  signal(SIGCHLD, handle_children);
   signal(SIGINT, handle_intr);
   signal(SIGTERM, handle_intr);
   signal(SIGQUIT, handle_intr);
@@ -235,8 +225,6 @@ int main(int argc, char* argv[])
   s = make_socket();
   log_status();
   for(;;) {
-    while(forked >= opt_connections)
-      handle_child();
-    handle_connection(s);
+    accept_connection(s);
   }
 }
