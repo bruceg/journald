@@ -20,10 +20,9 @@ Record Format:
 - Record type (single byte):
   NUL == end of journal, anything else means a potentially valid transaction
   I == stream information
-  O == start and end of the records for the given stream
-  S == start of the records for the given stream
+  D == data record for the given stream
+  O == first and last record (once) for the given stream
   E == end of the records for the given stream
-  C == continued data for the given stream
   A == abort record
 - Stream number
 - Record number
@@ -47,8 +46,8 @@ Record Format:
 
 - Possible sequences of record types:
   I O
-  I S C* E
-  I S C* A
+  I D* E
+  I D* A
 
 - Unless otherwise noted, all the above numbers are represented as a
   4-byte binary value, MSB first.
