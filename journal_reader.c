@@ -1,5 +1,5 @@
 /* journal_reader.c - Library for dumping the contents of journal directories.
-   Copyright (C) 2000 Bruce Guenter
+   Copyright (C) 2000,2002 Bruce Guenter
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,104 +18,37 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <dirent.h>
 #include <unistd.h>
+
+#include <iobuf/iobuf.h>
+#include <msg/msg.h>
+
 #include "hash.h"
+#include "journal_reader.h"
 
-extern const char* program;
-
+#if DEBUG_MSGS
 #define MSG0(S) do{ printf("%s: %s\n", program, S); }while(0)
 #define MSG1(S,A) do{ printf("%s: " S "\n", program, A); }while(0)
 #define MSG2(S,A,B) do{ printf("%s: " S "\n", program, A, B); }while(0)
 #define MSG3(S,A,B,C) do{ printf("%s: " S "\n", program, A, B, C); }while(0)
+#else
+#define MSG0(S) do{ }while(0)
+#define MSG1(S,A) do{ }while(0)
+#define MSG2(S,A,B) do{ }while(0)
+#define MSG3(S,A,B,C) do{ }while(0)
+#endif
 
-struct dirent_node
-{
-  struct dirent entry;
-  unsigned long use_count;
-  struct dirent_node* next;
-};
-typedef struct dirent_node dirent_node;
-
-struct stream
-{
-  unsigned long strnum;
-  unsigned long offset;
-  unsigned long start_offset;
-  unsigned long identlen;
-  char* ident;
-  struct stream* next;
-  dirent_node* entry;
-  void* data;
-};
-typedef struct stream stream;
-
-extern void init_stream(stream* s);
-extern void append_stream(stream* s, const char* buf, unsigned long reclen);
-extern void end_stream(stream* s);
-extern void abort_stream(stream* s);
-
-static int opt_unlink;
+const int msg_show_pid = 0;
 
 static stream* streams;
-
-static dirent_node* direntries;
-static dirent_node* curr_entry;
-
-void die(const char* msg)
-{
-  perror(msg);
-  exit(1);
-}
+static unsigned long pagesize;
 
 static unsigned long bytes2ulong(const unsigned char bytes[4])
 {
   return (bytes[0]<<24) | (bytes[1]<<16) | (bytes[2]<<8) | bytes[3];
-}
-
-static int cmp_dirent_node(const void* a, const void* b)
-{
-  const dirent_node* da = *(dirent_node**)a;
-  const dirent_node* db = *(dirent_node**)b;
-  return strcmp(da->entry.d_name, db->entry.d_name);
-}
-
-static void read_directory(void)
-{
-  DIR* dir;
-  struct dirent* de;
-  dirent_node* n;
-  dirent_node* list;
-  dirent_node** tmp;
-  unsigned count;
-  unsigned i;
-  
-  dir = opendir(".");
-  if (!dir) die("opendir");
-  list = 0;
-  count = 0;
-  while ((de = readdir(dir)) != 0) {
-    if (de->d_name[0] == '.') continue;
-    n = malloc(sizeof(dirent_node));
-    n->entry = *de;
-    n->use_count = 0;
-    n->next = list;
-    list = n;
-    ++count;
-  }
-  closedir(dir);
-
-  tmp = calloc(count, sizeof(dirent_node*));
-  for (i = 0; list && i < count; i++, list = list->next)
-    tmp[i] = list;
-  qsort(tmp, count, sizeof(dirent_node*), cmp_dirent_node);
-  direntries = tmp[0];
-  for (i = 0; i < count-1; i++)
-    tmp[i]->next = tmp[i+1];
-  tmp[i]->next = 0;
-  free(tmp);
 }
 
 static stream* new_stream(unsigned long strnum, unsigned long offset,
@@ -130,8 +63,6 @@ static stream* new_stream(unsigned long strnum, unsigned long offset,
   memcpy(n->ident, id, idlen);
   n->ident[idlen] = 0;
   n->next = streams;
-  n->entry = curr_entry;
-  n->entry->use_count++;
   streams = n;
   init_stream(n);
   return n;
@@ -156,14 +87,6 @@ static void del_stream(stream* find)
 	prev->next = ptr->next;
       else
 	streams = ptr->next;
-      ptr->entry->use_count--;
-      if (opt_unlink) {
-	while (!direntries->use_count && direntries != curr_entry) {
-	  MSG1("Removing '%s'...", direntries->entry.d_name);
-	  unlink(direntries->entry.d_name);
-	  direntries = direntries->next;
-	}
-      }
       free(ptr);
       return;
     }
@@ -232,28 +155,27 @@ static void handle_record(char type, unsigned long strnum,
   }
 }
 
-static int read_record(int in)
+static int read_record(unsigned char type, ibuf* in)
 {
 #undef FAIL
-#define FAIL(MSG) do{ printf("%s: %s\n", program, MSG); return 0; }while(0)
+#define FAIL(MSG) do{ error1(MSG); return 0; }while(0)
   static unsigned char header[1+4+4+4];
   static char hcmp[HASH_SIZE];
   static HASH_CTX hash;
-  char type;
   unsigned long strnum;
   unsigned long recnum;
   unsigned long reclen;
-  const unsigned char* hdrptr;
+  unsigned char* hdrptr;
   char* buf;
   
-  if (read(in, header, sizeof header) != sizeof header) return 0;
+  if (!ibuf_read(in, header+1, sizeof header-1)) return 0;
   hdrptr = header;
-  if ((type = *hdrptr++) == 0) return 0;
+  *hdrptr++ = type;
   strnum = bytes2ulong(hdrptr); hdrptr += 4;
   recnum = bytes2ulong(hdrptr); hdrptr += 4;
   reclen = bytes2ulong(hdrptr);
   buf = alloc_buffer(reclen+HASH_SIZE);
-  if (read(in, buf, reclen+HASH_SIZE) != reclen+HASH_SIZE)
+  if (!ibuf_read(in, buf, reclen+HASH_SIZE))
     FAIL("Could not read record data.");
   hash_init(&hash);
   hash_update(&hash, header, sizeof header);
@@ -266,37 +188,48 @@ static int read_record(int in)
   return 1;
 }
 
-static void read_journal()
+static int skip_page(ibuf* in)
+{
+  unsigned long pos;
+  pos = ibuf_tell(in);
+  return ibuf_seek(in, pos + (pagesize - pos%pagesize));
+}
+
+static int read_transaction(ibuf* in)
+{
+  unsigned char type;
+  if (!ibuf_getc(in, &type)) return 0;
+  if (type == 0) return 0;
+  do {
+    read_record(type, in);
+    if (!ibuf_getc(in, &type)) return 0;
+  } while (type != 0);
+  return skip_page(in);
+}
+
+void read_journal(const char* filename)
 {
 #undef FAIL
 #define FAIL(MSG) do{fprintf(stderr,"%s: " MSG ", skipping\n", program, filename);return;}while(0)
-  static char header[16];
-  int in;
-  const char* filename;
-
-  filename = curr_entry->entry.d_name;
-  if ((in = open(filename, O_RDONLY)) == -1) FAIL("Could not open '%s'");
-  if (read(in, header, sizeof header) != sizeof header)
-    FAIL("Could not read header from '%s'");
-  if (memcmp(header, "journald", 8)) FAIL("'%s' is not a journald file");
-  if (bytes2ulong(header+8) != 1)
-    FAIL("'%s' is not a version 1 journald file");
-  MSG1("Start file '%s'", filename);
-  while (read_record(in))
-    ;
-  close(in);
-  MSG1("End file '%s'", filename);
-}
-
-void read_journal_directory(const char* dir, int do_unlink)
-{
   stream* h;
-  if (dir && chdir(dir))
-    die("Could not change directory");
-  opt_unlink = do_unlink;
-  read_directory();
-  for (curr_entry = direntries; curr_entry; curr_entry = curr_entry->next)
-    read_journal();
+  char header[8+4+4];
+  ibuf in;
+
+  if (!ibuf_open(&in, filename, 0)) FAIL("Could not open '%s'");
+  if (!ibuf_read(&in, header, sizeof header))
+    FAIL("Could not read header from '%s'");
+  if (memcmp(header, "journald", 8) != 0)
+    FAIL("'%s' is not a journald file");
+  if (bytes2ulong(header+8) != 2)
+    FAIL("'%s' is not a version 2 journald file");
+  if ((pagesize = bytes2ulong(header+12)) == 0)
+    FAIL("'%s' has zero page size");
+  if (!skip_page(&in)) FAIL("Could not skip first page of '%s'");
+  MSG1("Start file '%s'", filename);
+  while (read_transaction(&in))
+    ;
+  ibuf_close(&in);
+  MSG1("End file '%s'", filename);
   for (h = streams; h; h = h->next)
     printf("%s: Stream #%lu ID '%s' had no end marker\n",
 	   program, h->strnum, h->ident);
