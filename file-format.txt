@@ -5,7 +5,7 @@
   transaction.
 
 - Each transaction consists of a control header followed by zero or more
-  records, followed by a CRC.
+  records, followed by a check code.
 
 - The transaction immediately following the last one is marked as empty.
 
@@ -44,7 +44,7 @@ Record Format:
 - The record number is a sequential marker that starts at zero for each
   new stream.
 
-- Possible sequences of record types:
+- Possible sequences of record types within a stream:
   I O
   I D* E
   I D* A
