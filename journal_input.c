@@ -141,6 +141,7 @@ void handle_data(connection* con, char* data, unsigned long size)
   }
   else {
     while (size && con->state != -1) {
+      used = 0;
 #ifdef DEBUG
       printf("state=%d byte=%d length=%ld buf_length=%ld count=%d ",
 	     con->state, *data, con->length, con->buf_length, con->count);
