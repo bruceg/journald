@@ -14,6 +14,7 @@ struct connection
   unsigned long ident_len;
   unsigned long buf_length;
   int not_first;
+  int wrote_ident;
   int ok;
   unsigned long total;
   unsigned long records;
@@ -24,6 +25,8 @@ struct connection
 };
 typedef struct connection connection;
 
+extern connection* connections;
+extern unsigned opt_connections;
 extern int opt_twopass;
 extern unsigned long opt_maxsize;
 

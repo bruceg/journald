@@ -46,7 +46,6 @@ static unsigned long opt_timeout = 10*1000;
 static unsigned opt_quiet = 0;
 static unsigned opt_verbose = 0;
 static unsigned opt_delete = 1;
-static unsigned opt_connections = 10;
 static const char* opt_socket;
 static uid_t opt_uid = -1;
 static gid_t opt_gid = -1;
@@ -55,8 +54,8 @@ static int opt_backlog = 128;
 
 int opt_twopass = 0;
 unsigned long opt_maxsize = 1000000;
-
-static connection* connections;
+unsigned opt_connections = 10;
+connection* connections;
 
 static const char* usage_str =
 "usage: %s [options] socket journal-dir\n"

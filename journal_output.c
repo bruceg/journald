@@ -56,7 +56,7 @@ int rotate_journal(void)
   static char buf[60];
   char* ptr;
   struct timeval tv;
-  int i;
+  unsigned i;
 
   if (fdout) {
     if (!sync_records()) return 0;
@@ -77,6 +77,8 @@ int rotate_journal(void)
   if (unlink("current")) return 0;
   ++file_nr;
   if (!fsynccwd()) return 0;
+  for (i = 0; i < opt_connections; i++)
+    connections[i].wrote_ident = 0;
   return 1;
 }
 
@@ -105,10 +107,12 @@ static void set_iov(struct iovec* iov, char* data, unsigned long size,
   hash_update(hash, data, size);
 }
 
-static int write_record_raw(connection* con, char type)
+static int write_record_raw(char type,
+			    unsigned long stream, unsigned long record,
+			    unsigned long buflen, const char* buf)
 {
-  static struct iovec iov[4];
-  static unsigned char hdr[1+4+4+4+4+4];
+  static struct iovec iov[3];
+  static unsigned char hdr[1+4+4+4];
   static unsigned char hashbytes[HASH_SIZE];
   static HASH_CTX hash;
   unsigned long wr;
@@ -117,32 +121,34 @@ static int write_record_raw(connection* con, char type)
   
   hdrptr = hdr;
   *hdrptr++ = type;
-  ulong2bytes(con->number, hdrptr); hdrptr += 4;
-  ulong2bytes(con->records, hdrptr); hdrptr += 4;
-  ulong2bytes(con->total, hdrptr); hdrptr += 4;
-  ulong2bytes(con->ident_len, hdrptr); hdrptr += 4;
-  ulong2bytes(con->buf_length, hdrptr);
+  ulong2bytes(stream, hdrptr); hdrptr += 4;
+  ulong2bytes(record, hdrptr); hdrptr += 4;
+  ulong2bytes(buflen, hdrptr);
   hash_init(&hash);
   set_iov(iov+0, hdr, sizeof hdr, &hash);
-  set_iov(iov+1, con->ident, con->ident_len, &hash);
-  set_iov(iov+2, con->buf, con->buf_length, &hash);
+  set_iov(iov+1, (char*)buf, buflen, &hash);
   hash_finish(&hash, hashbytes);
-  iov[3].iov_base = hashbytes;
-  iov[3].iov_len = HASH_SIZE;
+  iov[2].iov_base = hashbytes;
+  iov[2].iov_len = HASH_SIZE;
   
   if (opt_twopass && !saved_type) {
     saved_type = type;
     type = 0;
   }
 
-  reclen = sizeof hdr + con->ident_len + con->buf_length + HASH_SIZE;
-  if (journal_size+reclen >= opt_maxsize)
-    if (!open_journal()) return 0;
-  
-  if ((wr = writev(fdout, iov, 4)) != reclen) return 0;
+  reclen = sizeof hdr + buflen + HASH_SIZE;
+  if ((wr = writev(fdout, iov, 3)) != reclen) return 0;
   journal_size += reclen;
   transaction_size += reclen;
   return 1;
+}
+
+static int write_ident(connection* con)
+{
+  static char buf[4+IDENTSIZE];
+  ulong2bytes(con->total, buf);
+  memcpy(buf+4, con->ident, con->ident_len);
+  return write_record_raw('I', con->number, 0, con->ident_len+4, buf);
 }
 
 int write_record(connection* con, int final, int abort)
@@ -158,7 +164,16 @@ int write_record(connection* con, int final, int abort)
     type = final ?
       (con->not_first ? 'E' : 'O') : (con->not_first ? 'C' : 'S');
 
-  if (!write_record_raw(con, type)) return 0;
+  if (journal_size + con->buf_length >= opt_maxsize)
+    if (!open_journal()) return 0;
+  
+  if (!con->wrote_ident) {
+    if (!write_ident(con)) return 0;
+    con->wrote_ident = 1;
+  }
+  
+  if (!write_record_raw(type, con->number, con->records,
+			con->buf_length, con->buf)) return 0;
   
   con->total += con->buf_length;
   con->records++;
