@@ -32,22 +32,29 @@ static uid_t opt_uid = -1;
 static gid_t opt_gid = -1;
 static mode_t opt_umask = 0;
 static int opt_backlog = 128;
+int opt_twopass = 1;
 
 static connection* connections;
+
+static const char* usage_str =
+"usage: %s [options] socket journal-file\n"
+"  -u UID       Change user id to UID after creating socket.\n"
+"  -g GID       Change group id to GID after creating socket.\n"
+"  -U           Same as '-u $UID -g $GID'.\n"
+"  -m MASK      Set umask to MASK (in octal) before creating socket.\n"
+"               (defaults to 0)\n"
+"  -c N         Do not handle more than N simultaneous connections.\n"
+"               (default 10)\n"
+"  -b N         Allow a backlog of N connections.\n"
+"  -1           Single-pass transaction commit.\n"
+"  -2           Re-write the type flag to commit a transaction.\n"
+"               (default, slower, but guarantees consistency)\n";
 
 void usage(const char* message)
 {
   if (message)
     fprintf(stderr, "%s: %s\n", argv0, message);
-  fprintf(stderr, "usage: %s [options] socket journal-file\n"
-	  "  -u UID       Change user id to UID after creating socket.\n"
-	  "  -g GID       Change group id to GID after creating socket.\n"
-	  "  -U           Same as '-u $UID -g $GID'.\n"
-	  "  -m MASK      Set umask to MASK (in octal) before creating socket.\n"
-	  "               (defaults to 0)\n"
-	  "  -c N         Do not handle more than N simultaneous connections.\n"
-	  "               (default 10)\n"
-	  "  -b N         Allow a backlog of N connections.\n", argv0);
+  fprintf(stderr, usage_str, argv0);
   exit(1);
 }
 
@@ -100,8 +107,10 @@ void parse_options(int argc, char* argv[])
   int opt;
   char* ptr;
   argv0 = argv[0];
-  while((opt = getopt(argc, argv, "qQvc:u:g:Ub:B:m:")) != EOF) {
+  while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:")) != EOF) {
     switch(opt) {
+    case '1': opt_twopass = 0; break;
+    case '2': opt_twopass = 1; break;
     case 'q': opt_quiet = 1; opt_verbose = 0; break;
     case 'Q': opt_quiet = 0; break;
     case 'v': opt_quiet = 0; opt_verbose = 1; break;

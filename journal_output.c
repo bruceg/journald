@@ -8,6 +8,8 @@
 static int fdout = -1;
 static const char header[16] = "journald" "\0\0\0\1" "\0\0\0\0";
 
+extern int opt_twopass;
+
 int open_journal(const char* path)
 {
   if (chdir(path)) return 0;
@@ -68,7 +70,7 @@ int write_record(connection* con, int final, int abort)
   ulong2bytes(crc, crcbytes);
   set_iov(iov+5, crcbytes, 4, crc);
   
-  if (!saved_type) {
+  if (!opt_twopass && !saved_type) {
     saved_type = type[0];
     type[0] = 0;
   }
@@ -85,22 +87,27 @@ int write_record(connection* con, int final, int abort)
 int sync_records(void)
 {
   char type[1];
-  if (!saved_type) return 1;
+  if (opt_twopass && !saved_type) return 1;
 
   /* First, append an empty record marker and sync the data */
   type[0] = 0;
   if (write(fdout, type, 1) != 1) return 0;
   if (fdatasync(fdout)) return 0;
 
-  /* Then restore the original starting record type byte and sync again */
-  if (lseek(fdout, -(bytes_written+1), SEEK_CUR) == -1) return 0;
-  type[0] = saved_type;
-  if (write(fdout, type, 1) != 1) return 0;
-  if (fdatasync(fdout)) return 0;
-  saved_type = 0;
+  if (opt_twopass) {
+    /* Then restore the original starting record type byte and sync again */
+    if (lseek(fdout, -(bytes_written+1), SEEK_CUR) == -1) return 0;
+    type[0] = saved_type;
+    if (write(fdout, type, 1) != 1) return 0;
+    if (fdatasync(fdout)) return 0;
+    saved_type = 0;
 
-  /* Finally, seek back to where this routine started. */
-  if (lseek(fdout, bytes_written-1, SEEK_CUR) == -1) return 0;
+    /* Finally, seek back to where this routine started. */
+    if (lseek(fdout, bytes_written-1, SEEK_CUR) == -1) return 0;
+  }
+  else
+    if (lseek(fdout, -1, SEEK_CUR) == -1) return 0;
+  
   bytes_written = 0;
   return 1;
 }
