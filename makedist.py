@@ -15,7 +15,7 @@ EXTRAS = [
 	'NEWS',
 	'README',
 	'TODO',
-	'*.html',
+	#'*.html',
 	'*.txt',
 	]
 
