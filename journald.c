@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,9 +33,11 @@ static gid_t opt_gid = -1;
 static mode_t opt_umask = 0;
 static int opt_backlog = 128;
 
+static connection* connections;
+
 void usage(const char* message)
 {
-  if(message)
+  if (message)
     fprintf(stderr, "%s: %s\n", argv0, message);
   fprintf(stderr, "usage: %s [options] socket journal-file\n"
 	  "  -u UID       Change user id to UID after creating socket.\n"
@@ -50,21 +53,23 @@ void usage(const char* message)
 
 void log_status(void)
 {
-  if(opt_verbose)
+  if (opt_verbose)
     printf("journald: status: %d/%d\n", connection_count, opt_connections);
 }
 
-void log_connection_exit(pid_t pid, long bytes)
+void log_connection_exit(int slot)
 {
-  if(opt_verbose)
-    printf("journald: end %d bytes %ld\n", pid, bytes);
+  if (opt_verbose)
+    printf("journald: end %d bytes %ld records %ld %s\n", slot,
+	   connections[slot].total, connections[slot].records,
+	   connections[slot].ok ? "OK" : "Aborted");
   log_status();
 }
 
-void log_connection_start(pid_t pid)
+void log_connection_start(int slot)
 {
-  if(opt_verbose)
-    printf("journald: pid %d\n", pid);
+  if (opt_verbose)
+    printf("journald: start %d\n", slot);
 }
 
 void die(const char* msg)
@@ -77,21 +82,17 @@ void die(const char* msg)
 void use_uid(const char* str)
 {
   char* ptr;
-  if(!str)
-    usage("UID not found in environment.");
+  if (!str) usage("UID not found in environment.");
   opt_uid = strtoul(str, &ptr, 10);
-  if(*ptr != 0)
-    usage("Invalid UID number");
+  if (*ptr != 0) usage("Invalid UID number");
 }
 
 void use_gid(const char* str)
 {
   char* ptr;
-  if(!str)
-    usage("GID not found in environment.");
+  if (!str) usage("GID not found in environment.");
   opt_gid = strtoul(str, &ptr, 10);
-  if(*ptr != 0)
-    usage("Invalid GID number");
+  if (*ptr != 0) usage("Invalid GID number");
 }
 
 void parse_options(int argc, char* argv[])
@@ -108,8 +109,7 @@ void parse_options(int argc, char* argv[])
     case 'D': opt_delete = 1; break;
     case 'c':
       opt_connections = strtoul(optarg, &ptr, 10);
-      if(*ptr != 0)
-	usage("Invalid connection limit number.");
+      if (*ptr != 0) usage("Invalid connection limit number.");
       break;
     case 'u': use_uid(optarg); break;
     case 'g': use_gid(optarg); break;
@@ -119,13 +119,11 @@ void parse_options(int argc, char* argv[])
       break;
     case 'm':
       opt_umask = strtoul(optarg, &ptr, 8);
-      if(*ptr != 0)
-	usage("Invalid mask value.");
+      if (*ptr != 0) usage("Invalid mask value.");
       break;
     case 'b':
       opt_backlog = strtoul(optarg, &ptr, 10);
-      if(*ptr != 0)
-	usage("Invalid backlog count.");
+      if (*ptr != 0) usage("Invalid backlog count.");
       break;
     default:
       usage(0);
@@ -133,8 +131,7 @@ void parse_options(int argc, char* argv[])
   }
   argc -= optind;
   argv += optind;
-  if(argc != 2)
-    usage(0);
+  if (argc != 2) usage(0);
   opt_socket = argv[0];
   opt_journal = argv[1];
 }
@@ -150,16 +147,11 @@ int make_socket()
   strcpy(saddr->sun_path, opt_socket);
   unlink(opt_socket);
   s = socket(AF_UNIX, SOCK_STREAM, 0);
-  if(s < 0)
-    die("socket");
-  if(bind(s, (struct sockaddr*)saddr, SUN_LEN(saddr)) != 0)
-    die("bind");
-  if(listen(s, opt_backlog) != 0)
-    die("listen");
-  if(opt_gid != (gid_t)-1 && setgid(opt_gid) == -1)
-    die("setgid");
-  if(opt_uid != (uid_t)-1 && setuid(opt_uid) == -1)
-    die("setuid");
+  if (s < 0) die("socket");
+  if (bind(s, (struct sockaddr*)saddr, SUN_LEN(saddr)) != 0) die("bind");
+  if (listen(s, opt_backlog) != 0) die("listen");
+  if (opt_gid != (gid_t)-1 && setgid(opt_gid) == -1) die("setgid");
+  if (opt_uid != (uid_t)-1 && setuid(opt_uid) == -1) die("setuid");
   umask(old_umask);
   return s;
 }
@@ -168,28 +160,32 @@ void handle_connection(connection* con)
 {
   char buf[4096];
   long rd;
-  while (con->state != -1) {
-    rd = read(con->fd, buf, sizeof buf);
-    if (!rd) {
-      handle_data(con, 0, 0);
-      break;
-    }
-    if (rd == -1) {
-      write_record(con, 0, 1);
-      return;
-    }
-    handle_data(con, buf, rd);
+  rd = read(con->fd, buf, sizeof buf);
+  if (!rd || rd == -1) {
+    write_record(con, 0, 1);
+    con->state = -1;
   }
-  if (!sync_records()) con->ok = 0;
-  buf[0] = con->ok;
-  write(con->fd, buf, 1);
+  else
+    handle_data(con, buf, rd);
+  if(con->state == -1) {
+    if (con->ok) {
+      if (!sync_records()) con->ok = 0;
+      buf[0] = con->ok;
+      write(con->fd, buf, 1);
+    }
+    close(con->fd);
+    --connection_count;
+    log_connection_exit(con-connections);
+    con->fd = 0;
+  }
 }
+ 
 
 void accept_connection(int s)
 {
   int fd;
-  pid_t pid;
-  connection con;
+  int i;
+  
   do {
     fd = accept(s, NULL, NULL);
     // All the listed error return values are not possible except for
@@ -197,21 +193,53 @@ void accept_connection(int s)
   } while(fd < 0);
   ++connection_count;
   log_status();
-  log_connection_start(pid);
 
-  memset(&con, 0, sizeof con);
-  con.fd = fd;
+  for (i = 0; i < opt_connections; i++) {
+    if (!connections[i].fd) {
+      memset(connections+i, 0, sizeof(connection));
+      connections[i].fd = fd;
+      log_connection_start(i);
+      return;
+    }
+  }
+}
+
+void do_select(int s)
+{
+  int fdmax;
+  int fd;
+  fd_set rfds;
+  int i;
   
-  handle_connection(&con);
-  
-  close(fd);
-  --connection_count;
-  log_connection_exit(pid, 0);
+  fdmax = -1;
+  FD_ZERO(&rfds);
+  if (connection_count < opt_connections) {
+    FD_SET(s, &rfds);
+    fdmax = s;
+  }
+  for (i = 0; i < opt_connections; i++) {
+    fd = connections[i].fd;
+    if (fd) {
+      FD_SET(fd, &rfds);
+      if (fd > fdmax) fdmax = fd;
+    }
+  }
+  while ((fd = select(fdmax+1, &rfds, 0, 0, 0)) == -1) {
+    if (errno == EINTR) continue;
+    die("select");
+  }
+  if (FD_ISSET(s, &rfds))
+    accept_connection(s);
+  for (i = 0; i < opt_connections; i++) {
+    fd = connections[i].fd;
+    if (FD_ISSET(connections[i].fd, &rfds))
+      handle_connection(connections+i);
+  }
 }
 
 void handle_intr()
 {
-  if(opt_delete)
+  if (opt_delete)
     unlink(opt_socket);
   exit(0);
 }
@@ -220,6 +248,7 @@ int main(int argc, char* argv[])
 {
   int s;
   parse_options(argc, argv);
+  connections = malloc(sizeof(connection) * opt_connections);
   signal(SIGINT, handle_intr);
   signal(SIGTERM, handle_intr);
   signal(SIGQUIT, handle_intr);
@@ -229,7 +258,6 @@ int main(int argc, char* argv[])
   if (!open_journal(opt_journal)) return 1;
   s = make_socket();
   log_status();
-  for(;;) {
-    accept_connection(s);
-  }
+  for(;;)
+    do_select(s);
 }
