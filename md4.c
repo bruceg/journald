@@ -132,20 +132,16 @@ md4_process_bytes (buffer, len, ctx)
   if (ctx->buflen != 0)
     {
       size_t left_over = ctx->buflen;
-      size_t add = 128 - left_over > len ? len : 128 - left_over;
+      size_t add = 64 - left_over;
+      if (add > len)
+	add = len;
 
       memcpy (&ctx->buffer[left_over], buffer, add);
+
+      if (left_over + add == 64)
+	md4_process_block (ctx->buffer, ctx);
+
       ctx->buflen += add;
-
-      if (left_over + add >= 64)
-	{
-	  md4_process_block (ctx->buffer, ctx);
-	  /* The regions in the following copy operation cannot overlap.  */
-	  memcpy (ctx->buffer, &ctx->buffer[(left_over + add) & ~63],
-		  (left_over + add) & 63);
-	  ctx->buflen = (left_over + add) & 63;
-	}
-
       buffer = (const char *) buffer + add;
       len -= add;
     }
@@ -306,15 +302,36 @@ md4_process_block (buffer, ctx)
 
 #ifdef MD4_SELFTEST
 #include <stdio.h>
-void test(const char* str, unsigned char hash[16]) 
+static void test(const char* str, unsigned char hash[16]) 
 {
-  MD4_CTX ctx;
   unsigned char cmp[16];
   int i;
   md4_buffer(str, strlen(str), cmp);
   for (i = 0; i < 16; i++)
     if (cmp[i] != hash[i]) {
       printf("MD4 of '%s' failed\ngood=", str);
+      for(i = 0; i < 16; i++)
+	printf("%02x", hash[i]);
+      printf("\ncalc=");
+      for(i = 0; i < 16; i++)
+	printf("%02x", cmp[i]);
+      printf("\n");
+      exit(1);
+    }
+}
+
+static void test2(const char* str1, const char* str2, unsigned char hash[16]) 
+{
+  MD4_CTX ctx;
+  unsigned char cmp[16];
+  int i;
+  md4_init_ctx(&ctx);
+  md4_process_bytes(str1, strlen(str1), &ctx);
+  md4_process_bytes(str2, strlen(str2), &ctx);
+  md4_finish_ctx(&ctx, cmp);
+  for (i = 0; i < 16; i++)
+    if (cmp[i] != hash[i]) {
+      printf("MD4 of '%s' '%s' failed\ngood=", str1, str2);
       for(i = 0; i < 16; i++)
 	printf("%02x", hash[i]);
       printf("\ncalc=");
@@ -342,5 +359,8 @@ int main(void)
   test("123456789012345678901234567890123456789012345678901234567890123456"
        "78901234567890",
        "\xe3\x3b\x4d\xdc\x9c\x38\xf2\x19\x9c\x3e\x7b\x16\x4f\xcc\x05\x36");
+  test2("123456789012345678901234567890123456789012345678901234567890",
+	"12345678901234567890",
+	"\xe3\x3b\x4d\xdc\x9c\x38\xf2\x19\x9c\x3e\x7b\x16\x4f\xcc\x05\x36");
 }
 #endif
