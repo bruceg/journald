@@ -1,7 +1,7 @@
 - The data file is broken down into transactions, which are composed of
   one or more records.
 
-- Atomic writes are ensured by the initial "data flag" on each
+- Atomic transactions are ensured by the initial "data flag" on each
   transaction.
 
 - Each transaction consists of a control header followed by zero or more
@@ -18,13 +18,15 @@ File Header Format:
 
 Record Format:
 - Record type (single byte):
-  NUL == end of journal, anything else means a valid transaction
+  NUL == end of journal, anything else means a potentially valid transaction
   O == start and end of the records for the given ID
   S == start of the records for the given ID
   E == end of the records for the given ID
   C == continued data for the given ID
   A == abort record
+- Stream number
 - Record number
+- Record offset
 - Record ID length
 - Record data length
 - Record ID
@@ -38,9 +40,12 @@ Record Format:
   record type, which is restored after the rest of the data is sync'ed
   to disk (two-pass algorithm).
 
-- The record number is a sequential marker that starts at zero when the
+- The stream number is a sequential marker that starts at zero when the
   server starts up, and may not be zero for the first record in the
   file.
+
+- The record number is a sequential marker that starts at zero for each
+  new stream.
 
 - Possible sequences of record types:
   O

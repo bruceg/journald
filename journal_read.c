@@ -30,7 +30,7 @@ void die(const char* msg)
   exit(1);
 }
 
-static unsigned long bytes2ulong(unsigned char bytes[4])
+static unsigned long bytes2ulong(const unsigned char bytes[4])
 {
   return (bytes[0]<<24) | (bytes[1]<<16) | (bytes[2]<<8) | bytes[3];
 }
@@ -89,20 +89,26 @@ static struct dirent* read_directory(void)
 
 static int read_record(int in)
 {
-  static unsigned char header[1+4+4+4];
+  static unsigned char header[1+4+4+4+4+4];
   static char buf[IDENTSIZE+CBUFSIZE+HASH_SIZE];
   static char hcmp[HASH_SIZE];
   static HASH_CTX hash;
   char type;
+  unsigned long strnum;
   unsigned long recnum;
+  unsigned long recoff;
   unsigned long idlen;
   unsigned long reclen;
+  const unsigned char* hdrptr;
   
   if (read(in, header, sizeof header) != sizeof header) return 0;
-  if ((type = header[0]) == 0) return 0;
-  recnum = bytes2ulong(header+1);
-  idlen = bytes2ulong(header+5);
-  reclen = bytes2ulong(header+9);
+  hdrptr = header;
+  if ((type = *hdrptr++) == 0) return 0;
+  strnum = bytes2ulong(hdrptr); hdrptr += 4;
+  recnum = bytes2ulong(hdrptr); hdrptr += 4;
+  recoff = bytes2ulong(hdrptr); hdrptr += 4;
+  idlen = bytes2ulong(hdrptr); hdrptr += 4;
+  reclen = bytes2ulong(hdrptr);
   if (idlen > IDENTSIZE || reclen > CBUFSIZE) return 0;
   if (read(in, buf, idlen+reclen+HASH_SIZE) != idlen+reclen+HASH_SIZE)
     return 0;
@@ -111,7 +117,8 @@ static int read_record(int in)
   hash_update(&hash, buf, idlen+reclen);
   hash_finish(&hash, hcmp);
   if (memcmp(buf+idlen+reclen, hcmp, HASH_SIZE)) return 0;
-  printf("+%c:%lu:%lu,%lu:", type, recnum, idlen, reclen);
+  printf("+%c:%lu:%lu:%lu:%lu,%lu:", type, strnum,
+	 recnum, recoff, idlen, reclen);
   fwrite(buf, idlen, 1, stdout);
   fwrite("->", 2, 1, stdout);
   fwrite(buf+idlen, reclen, 1, stdout);

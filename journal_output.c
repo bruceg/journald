@@ -34,12 +34,12 @@ static unsigned long transaction_size = 0;
 static unsigned long journal_size = 0;
 static unsigned long record_number = 0;
 
-static void ulong2bytes(unsigned long v, char bytes[4])
+static void ulong2bytes(unsigned long v, unsigned char bytes[4])
 {
-  bytes[3] = v & 0xff; v >>= 8;
-  bytes[2] = v & 0xff; v >>= 8;
-  bytes[1] = v & 0xff; v >>= 8;
-  bytes[0] = v;
+  bytes[3] = (unsigned char)(v & 0xff); v >>= 8;
+  bytes[2] = (unsigned char)(v & 0xff); v >>= 8;
+  bytes[1] = (unsigned char)(v & 0xff); v >>= 8;
+  bytes[0] = (unsigned char)(v & 0xff);
 }
 
 static int fsynccwd(void)
@@ -108,13 +108,14 @@ static void set_iov(struct iovec* iov, char* data, unsigned long size,
 
 int write_record(connection* con, int final, int abort)
 {
+  static struct iovec iov[4];
+  static unsigned char hdr[1+4+4+4+4+4];
+  static unsigned char hashbytes[HASH_SIZE];
+  static HASH_CTX hash;
   char type;
-  struct iovec iov[4];
-  unsigned char hdr[1+4+4+4];
-  unsigned char hashbytes[HASH_SIZE];
-  HASH_CTX hash;
   unsigned long wr;
   unsigned long reclen;
+  unsigned char* hdrptr;
   
   if (abort) {
     con->buf_length = 0;
@@ -125,10 +126,13 @@ int write_record(connection* con, int final, int abort)
     type = final ?
       (con->not_first ? 'E' : 'O') : (con->not_first ? 'C' : 'S');
 
-  hdr[0] = type;
-  ulong2bytes(record_number, hdr+1);
-  ulong2bytes(con->ident_len, hdr+5);
-  ulong2bytes(con->buf_length, hdr+9);
+  hdrptr = hdr;
+  *hdrptr++ = type;
+  ulong2bytes(con->number, hdrptr); hdrptr += 4;
+  ulong2bytes(con->records, hdrptr); hdrptr += 4;
+  ulong2bytes(con->total, hdrptr); hdrptr += 4;
+  ulong2bytes(con->ident_len, hdrptr); hdrptr += 4;
+  ulong2bytes(con->buf_length, hdrptr);
   hash_init(&hash);
   set_iov(iov+0, hdr, sizeof hdr, &hash);
   set_iov(iov+1, con->ident, con->ident_len, &hash);
