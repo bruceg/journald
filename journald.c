@@ -32,7 +32,7 @@ static gid_t opt_gid = -1;
 static mode_t opt_umask = 0;
 static int opt_backlog = 128;
 
-int opt_twopass = 1;
+int opt_twopass = 0;
 unsigned long opt_maxsize = 1000000;
 
 static connection* connections;
@@ -47,9 +47,9 @@ static const char* usage_str =
 "  -c N         Do not handle more than N simultaneous connections.\n"
 "               (default 10)\n"
 "  -b N         Allow a backlog of N connections.\n"
-"  -1           Single-pass transaction commit.\n"
+"  -1           Single-pass transaction commit (default).\n"
 "  -2           Re-write the type flag to commit a transaction.\n"
-"               (default, slower, but guarantees consistency)\n"
+"               (slower, but guarantees consistency)\n"
 "  -x N         Maximum journal file size, in bytes. (default 1000000)\n";
 
 void usage(const char* message)
