@@ -32,7 +32,6 @@ static unsigned long file_nr = 0;
 static char saved_type = 0;
 static unsigned long transaction_size = 0;
 static unsigned long journal_size = 0;
-static unsigned long record_number = 0;
 
 static void ulong2bytes(unsigned long v, unsigned char bytes[4])
 {
@@ -106,26 +105,16 @@ static void set_iov(struct iovec* iov, char* data, unsigned long size,
   hash_update(hash, data, size);
 }
 
-int write_record(connection* con, int final, int abort)
+static int write_record_raw(connection* con, char type)
 {
   static struct iovec iov[4];
   static unsigned char hdr[1+4+4+4+4+4];
   static unsigned char hashbytes[HASH_SIZE];
   static HASH_CTX hash;
-  char type;
   unsigned long wr;
   unsigned long reclen;
   unsigned char* hdrptr;
   
-  if (abort) {
-    con->buf_length = 0;
-    if (!con->not_first) return 1;
-    type = 'A';
-  }
-  else
-    type = final ?
-      (con->not_first ? 'E' : 'O') : (con->not_first ? 'C' : 'S');
-
   hdrptr = hdr;
   *hdrptr++ = type;
   ulong2bytes(con->number, hdrptr); hdrptr += 4;
@@ -153,7 +142,24 @@ int write_record(connection* con, int final, int abort)
   if ((wr = writev(fdout, iov, 4)) != reclen) return 0;
   journal_size += reclen;
   transaction_size += reclen;
-  record_number++;
+  return 1;
+}
+
+int write_record(connection* con, int final, int abort)
+{
+  char type;
+  
+  if (abort) {
+    con->buf_length = 0;
+    if (!con->not_first) return 1;
+    type = 'A';
+  }
+  else
+    type = final ?
+      (con->not_first ? 'E' : 'O') : (con->not_first ? 'C' : 'S');
+
+  if (!write_record_raw(con, type)) return 0;
+  
   con->total += con->buf_length;
   con->records++;
   con->not_first = 1;
