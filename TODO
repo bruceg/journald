@@ -15,17 +15,7 @@
 ? Modify the file format to add timestamp and transaction index to
   records?
 
-- On interrupt, journald should wait for connections to close before
-  exiting, and then close (no rotate needed).
-
 - Clean up the file format and documentation.
-
-- Write journal-dump, producing a low-level data dump.
-
-- Modify all the reader programs to deal with new file format.
-
-- Modify journal-read to wait for new records to be output to the
-  "current" file.
 
 - Modify journal-read to verify that the value of recnum is sequential.
 
@@ -36,4 +26,6 @@
 - Modify journal-read to mark the start and end of files, and print
   record summaries to stdout in an optional verbose mode.
 
-- Modify the record format to add support for compression (zlib).
+- Modify the record format to add support for compression (zlib)!
+  ? Compress each record seperately, or the whole transaction?
+  ? Reset compressor state before each transaction?
