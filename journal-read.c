@@ -1,4 +1,4 @@
-/* journal_read.c - Dump the contents of journal directories.
+/* journal-read.c - Dump the contents of journal directories.
    Copyright (C) 2000 Bruce Guenter
 
    This program is free software; you can redistribute it and/or modify
@@ -140,7 +140,7 @@ static handler* handlers;
 static handler* add_handler(unsigned long stream, unsigned long offset,
 			    char* id, unsigned long idlen)
 {
-  char filename[] = "journal_read.tmp.XXXXXX";
+  char filename[] = "journal-read.tmp.XXXXXX";
   handler* n;
   n = malloc(sizeof(handler));
   n->stream = stream;
@@ -232,7 +232,7 @@ static int read_record(int in)
     offset = bytes2ulong(buf);
     if (h) {
       if (offset != h->offset) {
-	printf("journal_read: "
+	printf("journal-read: "
 	       "Bad offset value for stream #%lu, dropping stream\n"
 	       "  Offset was %lu, should be %lu\n", h->stream,
 	       offset, h->offset);
@@ -250,7 +250,7 @@ static int read_record(int in)
 	h->offset += reclen;
       }
       else
-	printf("journal_read: "
+	printf("journal-read: "
 	       "Data record for nonexistant stream #%lu\n", strnum);
     }
     if (type == 'O' || type == 'E') {
@@ -259,7 +259,7 @@ static int read_record(int in)
 	del_handler(h);
       }
       else
-	printf("journal_read: "
+	printf("journal-read: "
 	       "End record for nonexistant stream #%lu\n", strnum);
     }
   }
@@ -269,7 +269,7 @@ static int read_record(int in)
 static void read_journal(const char* filename)
 {
 #undef FAIL
-#define FAIL(MSG) do{fprintf(stderr,"journal_read: " MSG ", skipping\n", filename);return;}while(0)
+#define FAIL(MSG) do{fprintf(stderr,"journal-read: " MSG ", skipping\n", filename);return;}while(0)
   static char header[16];
   int in;
   if ((in = open(filename, O_RDONLY)) == -1) FAIL("Could not open '%s'");

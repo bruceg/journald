@@ -23,7 +23,7 @@ installbin = $(install) -m 555
 installdir = $(install) -d
 installsrc = $(install) -m 444
 
-PROGS = journald journal_read journald-client
+PROGS = journald journal-read journald-client
 
 all: $(PROGS) journald.a
 
@@ -31,8 +31,8 @@ journald: journald.o journal_input.o journal_output.o md4.o
 	$(LD) $(LDFLAGS) journald.o journal_input.o journal_output.o md4.o \
 		-o $@ $(LIBS)
 
-journal_read: journal_read.o md4.o
-	$(LD) $(LDFLAGS) journal_read.o md4.o -o $@ $(LIBS)
+journal-read: journal-read.o md4.o
+	$(LD) $(LDFLAGS) journal-read.o md4.o -o $@ $(LIBS)
 
 journald-client: journald-client.o journald_client.o
 	$(LD) $(LDFLAGS) journald-client.o journald_client.o -o $@ $(LIBS)
@@ -52,7 +52,7 @@ journald.o: journald.c journald_server.h
 journal_input.o: journal_input.c journald_server.h
 journal_output.o: journal_output.c journald_server.h hash.h
 journald_client.o: journald_client.c journald_client.h
-journal_read.o: journal_read.c journald_server.h hash.h
+journal-read.o: journal-read.c journald_server.h hash.h
 journald-client.o: journald-client.c journald_client.h
 md4.o: md4.c md4.h
 

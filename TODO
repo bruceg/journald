@@ -1,15 +1,15 @@
-- Modify journal_read to mark the start and end of files, and print
+- Modify journal-read to mark the start and end of files, and print
   record summaries to stdout in an optional verbose mode.
 
-- Modify journal_read to remove journal files when all streams
+- Modify journal-read to remove journal files when all streams
   referencing that file are closed (optional?).
 
 - Modify the file format to align transaction starts on block boundaries.
 
-- Modify journal_read to wait for new records to be output to the
+- Modify journal-read to wait for new records to be output to the
   "current" file.
 
-- Modify journal_read to verify that the value of recnum is sequential.
+- Modify journal-read to verify that the value of recnum is sequential.
 
 - Make man pages and usage documentation for the various components.
 
