@@ -1,34 +1,53 @@
-- The data file is broken down into 512 byte blocks
-  - This is the same size as the block size on most hard drives, which
-    assures us of atomic writes.
-  - Page size might make block writes more efficient.
+- The data file is broken down into transactions, which are composed of
+  one or more records.
 
-- Each bundle consists of a control header followed by zero or more
-  records.
+- Atomic writes are ensured by the initial "data flag" on each
+  transaction.
 
-- The bundle immediately following the last one is marked as empty.
+- Each transaction consists of a control header followed by zero or more
+  records, followed by a CRC.
 
-- Each bundle is at least one block long, and will always start on a
-  block boundary.
+- The transaction immediately following the last one is marked as empty.
 
-- Data from multiple records are concatenated into one bundle.
+- Data from multiple records are concatenated into one transaction.
 
-Control Block Format:
-- Total bundle length (in blocks)
-  0 means end of journal
-- Number of records in this bundle (N)
-- N times the following:
-  - Record type (single byte):
-    S == start of the records for the given ID
-    F == first continuation data for the given ID in the journal
-         (for records that continue after the end of the journal)
-    E == end of the records for the given ID
-    O == start and end of record
-    C == continued data for the given ID
-    All record types may contain data.
-    Possible sequences of record types: O; S C* E; F C* E
-  - Record ID
-  - Offset from start of record data (in bytes, for "F" records only)
-  - Record data length (in bytes)
-Unless otherwise noted, all the above are numbers represented in ASCII
-followed by a NUL byte.
+File Header Format:
+- Constant string (8 bytes): "journald"
+- Version (2 bytes): "1\0"
+- Block size
+- Application name
+
+Record Format:
+- Record type (single byte):
+  NUL == end of journal, anything else means a valid transaction
+  O == start and end of the records for the given ID
+  S == start of the records for the given ID
+  E == end of the records for the given ID
+  C == continued data for the given ID
+  A == abort record
+- Record ID
+- Record data length
+- "length" bytes of record data
+- A 32-bit CRC on all the data from the non-zero value of the record
+  type flag to the last byte of the record data.
+
+- All record types may contain data.
+
+- The first record in a transaction is initially marked with a NUL
+  record type, which is restored after the rest of the data is sync'ed
+  to disk.
+
+- Possible sequences of record types:
+  O
+  S C* E
+  A
+  S C* A
+
+- All strings are terminated by a NUL.
+
+- Unless otherwise noted, all the above are numbers represented as an
+  ASCII decimal string.
+
+- Record IDs are a string supplied by the client.
+
+- The same Record ID may appear multiple times in the same transaction.

@@ -1,15 +1,13 @@
 Journalling daemon
 
-- Pre-allocated journal file (?)
 - Allows multiple connections
 - The data from multiple connections is bundled into large writes to the
   journal
-- Use mmap & msync for highest speed (won't update mtime)
-
-Issues:
-- How to handle writes larger than the journal size?
-  - The last write to the journal triggers a sync(2)
-  - Assume connector is simultaneously writing data to permanent store
+- Guarantees are provided by synchronous writing of 1-byte prefixes
+  using fdatasync.
+- The journal files have a fixed maximum size.
+- Writes past the end of the journal cause a new journal file to be
+  created.
 
 Per-record journal strategy:
 - read in a block of data
