@@ -1,3 +1,8 @@
+! Rewrite stdio code to use iobuf!
+! Use str lib etc!
+
+- Make the three writer options selectable journald options.
+
 - Set up a conf-writer switch to build a single journald binary from the
   three possibilities.
 

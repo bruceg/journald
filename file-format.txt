@@ -12,9 +12,6 @@
 - Data from multiple records may be concatenated into one transaction.
 
 - Check code is 64-bit CRC (8 bytes); polynomial is x64 + x4 + x3 + x1 + 1.
-  It used to be MD4, but CRC is designed specifically to detect changed data,
-  whereas a cryptographic hash is merely highly probable to detect changed
-  data.
 
 File Header Format:
 - Constant string (8 bytes): "journald"
