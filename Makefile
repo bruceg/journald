@@ -7,8 +7,8 @@ LIBS =
 
 all: journald testclient
 
-journald: journald.o journal_input.o journal_output.o crc32.o
-	$(LD) $(LDFLAGS) journald.o journal_input.o journal_output.o crc32.o \
+journald: journald.o journal_input.o journal_output.o md5.o
+	$(LD) $(LDFLAGS) journald.o journal_input.o journal_output.o md5.o \
 		-o $@ $(LIBS)
 
 testclient: testclient.o journald_client.o
@@ -16,6 +16,7 @@ testclient: testclient.o journald_client.o
 
 journald.o: journald.c journald.h
 journal_input.o: journal_input.c journald.h
-journal_output.o: journal_output.c journald.h
+journal_output.o: journal_output.c journald.h md5.h
 journald_client.o: journald_client.c journald_client.h
 testclient.o: testclient.c journald_client.h
+md5.o: md5.c md5.h

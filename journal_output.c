@@ -4,7 +4,7 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#include "crc32.h"
+#include "md5.h"
 #include "journald.h"
 
 static int fdout = 0;
@@ -68,12 +68,12 @@ int open_journal(void)
   return 1;
 }
 
-static CRC32 set_iov(struct iovec* iov, char* data, unsigned long size,
-		     CRC32 crc)
+static void set_iov(struct iovec* iov, char* data, unsigned long size,
+		    struct md5_ctx* hash)
 {
   iov->iov_base = data;
   iov->iov_len = size;
-  return CRC32_block(crc, data, size);
+  md5_process_bytes(data, size, hash);
 }
 
 int write_record(connection* con, int final, int abort)
@@ -83,8 +83,8 @@ int write_record(connection* con, int final, int abort)
   unsigned char ilen[4];
   unsigned char rlen[4];
   unsigned char recnum[4];
-  unsigned char crcbytes[4];
-  CRC32 crc;
+  unsigned char hashbytes[16];
+  struct md5_ctx hash;
   unsigned long wr;
   unsigned long reclen;
   
@@ -100,22 +100,23 @@ int write_record(connection* con, int final, int abort)
   ulong2bytes(con->ident_len, ilen);
   ulong2bytes(con->buf_length, rlen);
   ulong2bytes(record_number, recnum);
-  crc = CRC32init;
-  crc = set_iov(iov+0, type, 1, crc);
-  crc = set_iov(iov+1, recnum, 4, crc);
-  crc = set_iov(iov+2, ilen, 4, crc);
-  crc = set_iov(iov+3, rlen, 4, crc);
-  crc = set_iov(iov+4, con->ident, con->ident_len, crc);
-  crc = set_iov(iov+5, con->buf, con->buf_length, crc);
-  ulong2bytes(crc, crcbytes);
-  set_iov(iov+6, crcbytes, 4, crc);
+  md5_init_ctx(&hash);
+  set_iov(iov+0, type, 1, &hash);
+  set_iov(iov+1, recnum, 4, &hash);
+  set_iov(iov+2, ilen, 4, &hash);
+  set_iov(iov+3, rlen, 4, &hash);
+  set_iov(iov+4, con->ident, con->ident_len, &hash);
+  set_iov(iov+5, con->buf, con->buf_length, &hash);
+  md5_finish_ctx(&hash, hashbytes);
+  iov[6].iov_base = hashbytes;
+  iov[6].iov_len = 16;
   
   if (opt_twopass && !saved_type) {
     saved_type = type[0];
     type[0] = 0;
   }
 
-  reclen = 1+4+4+4+con->ident_len+con->buf_length+4;
+  reclen = 1+4+4+4+con->ident_len+con->buf_length+16;
   if (journal_size+reclen >= opt_maxsize)
     if (!open_journal()) return 0;
   
