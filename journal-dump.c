@@ -24,30 +24,31 @@
 
 const char program[] = "journal-dump";
 
-static void obuf_putstream(obuf* out, const char* tag, const stream* s,
-			   const char* end)
+static void obuf_putstream(obuf* out, const stream* s, const char* end)
 {
-  obuf_put2s(out, tag, " stream ");
-  obuf_putu(out, s->strnum);
+  obuf_puts(out, "stream ");
+  obuf_putuw(out, s->strnum, 10, ' ');
+  obuf_puts(out, " record ");
+  obuf_putuw(out, s->recnum, 10, ' ');
   obuf_puts(out, " offset ");
-  obuf_putu(out, s->offset);
+  obuf_putuw(out, s->offset, 10, ' ');
+  obuf_putc(out, ' ');
   obuf_puts(out, end);
 }
 
 void end_stream(stream* s)
 {
-  obuf_putstream(&outbuf, "end", s, "\n");
+  obuf_putstream(&outbuf, s, "end\n");
 }
 
 void abort_stream(stream* s)
 {
-  obuf_putstream(&outbuf, "abort", s, "\n");
+  obuf_putstream(&outbuf, s, "abort\n");
 }
 
 void init_stream(stream* s)
 {
-  obuf_putstream(&outbuf, "init", s, "\n");
-  obuf_puts(&outbuf, "  ident(");
+  obuf_putstream(&outbuf, s, "init ident(");
   obuf_putu(&outbuf, s->identlen);
   obuf_puts(&outbuf, ")='");
   obuf_write(&outbuf, s->ident, s->identlen);
@@ -56,7 +57,7 @@ void init_stream(stream* s)
 
 void append_stream(stream* s, const char* buf, unsigned long reclen)
 {
-  obuf_putstream(&outbuf, "append", s, " bytes ");
+  obuf_putstream(&outbuf, s, "append bytes ");
   obuf_putu(&outbuf, reclen);
   obuf_putc(&outbuf, LF);
 }
