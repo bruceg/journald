@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -37,6 +38,7 @@ int writer_fd;
 
 extern void writer_fdatasync_select(void);
 extern void writer_mmap_select(void);
+extern void writer_open_direct_select(void);
 extern void writer_open_sync_select(void);
 
 int writer_select(const char* name)
@@ -45,6 +47,8 @@ int writer_select(const char* name)
     writer_fdatasync_select();
   else if (strcmp(name, "mmap") == 0)
     writer_mmap_select();
+  else if (strcmp(name, "open+direct") == 0)
+    writer_open_direct_select();
   else if (strcmp(name, "open+sync") == 0)
     writer_open_sync_select();
   else
@@ -61,5 +65,35 @@ int writer_open(const char* path, int flags)
   if ((writer_pagesize = getpagesize()) < (unsigned)st.st_blksize)
     writer_pagesize = st.st_blksize;
   writer_size = (st.st_size / writer_pagesize) * writer_pagesize;
+  return 1;
+}
+
+int writer_file_open_flags = 0;
+
+int writer_file_init(const char* path)
+{
+  if (!writer_open(path, writer_file_open_flags)) return 0;
+  if ((writer_pagebuf = mmap(0, writer_pagesize, PROT_READ|PROT_WRITE,
+			     MAP_PRIVATE|MAP_ANON, 0, 0)) == 0)
+    return 0;
+  return 1;
+}
+
+int writer_file_seek(unsigned long offset)
+{
+  if ((unsigned long)lseek(writer_fd, offset, SEEK_SET) != offset)
+    return 0;
+  writer_pos = offset;
+  return 1;
+}
+
+int writer_file_writepage(void)
+{
+  if (writer_pos + writer_pagesize > writer_size)
+    return 0;
+  if ((unsigned long)
+      write(writer_fd, writer_pagebuf, writer_pagesize) != writer_pagesize)
+    return 0;
+  writer_pos += writer_pagesize;
   return 1;
 }

@@ -5,8 +5,9 @@ Changes in version 0.3
   for raw devices).  Wraparound is handled by first sync'ing all
   filesystems.
 
-- Introduced three journal writing mechanisms, fdatasync, open+sync, and
-  mmap+msync.
+- Introduced three journal writing mechanisms, fdatasync, mmap+msync,
+  open+direct (O_DIRECT), and open+sync (O_DSYNC).  O_DIRECT support is
+  untested.
 
 - Modified file format to introduce a "page size" on which all writes
   are alligned, and switched from MD4 to 64-bit CRC.

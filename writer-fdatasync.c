@@ -1,46 +1,23 @@
 #include <sys/types.h>
-#include <sys/mman.h>
 #include <unistd.h>
 
 #include "writer.h"
-
-static int _init(const char* path)
-{
-  if (!writer_open(path, 0)) return 0;
-  if ((writer_pagebuf = mmap(0, writer_pagesize, PROT_READ|PROT_WRITE,
-			     MAP_PRIVATE|MAP_ANON, 0, 0)) == 0)
-    return 0;
-  return 1;
-}
 
 static int _sync(void)
 {
   return fdatasync(writer_fd) == 0;
 }
 
-static int _seek(unsigned long offset)
-{
-  if ((unsigned long)lseek(writer_fd, offset, SEEK_SET) != offset)
-    return 0;
-  writer_pos = offset;
-  return 1;
-}
-
-static int _writepage(void)
-{
-  if (writer_pos + writer_pagesize > writer_size)
-    return 0;
-  if ((unsigned long)
-      write(writer_fd, writer_pagebuf, writer_pagesize) != writer_pagesize)
-    return 0;
-  writer_pos += writer_pagesize;
-  return 1;
-}
+extern int writer_file_open_flags;
+extern int writer_file_init(const char* path);
+extern int writer_file_seek(unsigned long);
+extern int writer_file_writepage(void);
 
 void writer_fdatasync_select(void)
 {
-  writer_init = _init;
+  writer_file_open_flags = 0;
+  writer_init = writer_file_init;
   writer_sync = _sync;
-  writer_seek = _seek;
-  writer_writepage = _writepage;
+  writer_seek = writer_file_seek;
+  writer_writepage = writer_file_writepage;
 }

@@ -67,9 +67,10 @@ const int msg_show_pid = 0;
 const char cli_help_prefix[] = "Sends journal streams through a program\n";
 const char cli_help_suffix[] =
 "\nThe following writer methods are available:\n"
-"  fdatasync:  Uses write and fdatasync to synchronize the data.\n"
-"  mmap:       Uses mmap to access the data, and msync to synchronize.\n"
-"  open+sync:  Opens the journal in synchronous write mode.\n";
+"  fdatasync:   Uses write and fdatasync to synchronize the data.\n"
+"  mmap:        Uses mmap to access the data, and msync to synchronize.\n"
+"  open+direct: Opens the journal in direct I/O mode (O_DIRECT).\n"
+"  open+sync:   Opens the journal in synchronous write mode (O_DSYNC).\n";
 const char cli_args_usage[] = "socket journal-file";
 const int cli_args_min = 2;
 const int cli_args_max = 2;
