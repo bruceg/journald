@@ -2,7 +2,7 @@
 #define JOURNALD__SERVER__H__
 
 #define IDENTSIZE 1024
-#define CBUFSIZE 1024
+#define CBUFSIZE 4096
 
 struct connection 
 {
