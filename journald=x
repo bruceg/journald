@@ -5,3 +5,7 @@ writer-fdatasync.o
 writer-mmap.o
 writer-open-sync.o
 crc64.o
+-lcli/cli
+-lmsg/msg
+-lstr/str
+-liobuf/iobuf

@@ -18,7 +18,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -27,7 +26,13 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#include <cli/cli.h>
+#include <msg/msg.h>
+#include <str/str.h>
+
 #include "server.h"
+#include "writer.h"
 
 extern void setup_env(int, const char*);
 
@@ -37,54 +42,78 @@ extern void setup_env(int, const char*);
 		      + strlen ((ptr)->sun_path))
 #endif
 
-static const char* argv0;
-
 static unsigned connection_count = 0;
 static unsigned long connection_number = 0;
 
 static unsigned long opt_timeout = 10*1000;
-static unsigned opt_quiet = 0;
 static unsigned opt_verbose = 0;
 static unsigned opt_delete = 1;
 static const char* opt_socket;
-static const char* opt_filename;
 static uid_t opt_uid = -1;
 static gid_t opt_gid = -1;
+static int opt_envuidgid = 0;
 static mode_t opt_umask = 0;
+const char* opt_umask_str = 0;
+static mode_t opt_mode = 0777;
+const char* opt_mode_str = 0;
 static int opt_backlog = 128;
 static int opt_synconexit = 0;
 static const char* opt_writer = "fdatasync";
-
 unsigned opt_connections = 10;
 connection* connections;
 
-static const char* usage_str =
-"usage: %s [options] socket journal-file\n"
-"  -u UID       Change user id to UID after creating socket.\n"
-"  -g GID       Change group id to GID after creating socket.\n"
-"  -U           Same as '-u $UID -g $GID'.\n"
-"  -m MASK      Set umask to MASK (in octal) before creating socket.\n"
-"               (defaults to 0)\n"
-"  -c N         Do not handle more than N simultaneous connections.\n"
-"               (default 10)\n"
-"  -b N         Allow a backlog of N connections.\n"
-"  -t N         Pause synchronization by N us. (default 10ms)\n"
-"  -s           Sync on exit/interrupt\n"
-"  -w NAME      Writer synchronization method. (default fdatasync)\n"
-"               Choices are: fdatasync, open+sync, or mmap.\n";
+const char program[] = "journald";
+const int msg_show_pid = 0;
+const char cli_help_prefix[] = "Sends journal streams through a program\n";
+const char cli_help_suffix[] =
+"\nThe following writer methods are available:\n"
+"  fdatasync:  Uses write and fdatasync to synchronize the data.\n"
+"  mmap:       Uses mmap to access the data, and msync to synchronize.\n"
+"  open+sync:  Opens the journal in synchronous write mode.\n";
+const char cli_args_usage[] = "socket journal-file";
+const int cli_args_min = 2;
+const int cli_args_max = 2;
+cli_option cli_options[] = {
+  { 'u', "uid", CLI_UINTEGER, 0, &opt_uid,
+    "Change user id to UID after creating socket", 0 },
+  { 'g', "gid", CLI_UINTEGER, 0, &opt_gid,
+    "Change group id to GID after creating socket", 0 },
+  { 'U', "envuidgid", CLI_FLAG, 1, &opt_envuidgid,
+    "Same as '-u $UID -g $GID'", 0 },
+  { 'm', "mode", CLI_STRING, 0, &opt_mode_str,
+    "Set mode of created socket (in octal)", 0 },
+  { 0, "umask", CLI_STRING, 0, &opt_umask_str,
+    "Set umask to MASK (in octal) before creating socket", 0 },
+  { 'c', "concurrency", CLI_UINTEGER, 0, &opt_connections,
+    "Do not handle more than N simultaneous connections", "10" },
+  { 't', "pause", CLI_UINTEGER, 0, &opt_timeout,
+    "Pause synchronization by N us", "10ms" },
+  { 's', "synconexit", CLI_FLAG, 1, &opt_synconexit,
+    "Sync on exit/interrupt", 0 },
+  { 'w', "writer", CLI_STRING, 0, &opt_writer,
+    "Writer synchronization method", "fdatasync" },
+  { 'q', "quiet", CLI_FLAG, 0, &opt_verbose,
+    "Turn off all but error messages", 0 },
+  { 'v', "verbose", CLI_FLAG, 1, &opt_verbose,
+    "Turn on all messages", 0 },
+  { 0, "delete", CLI_FLAG, 1, &opt_delete,
+    "Delete the socket on exit", 0 },
+  { 0, "no-delete", CLI_FLAG, 0, &opt_delete,
+    "Do not delete the socket on exit", 0 },
+  {0,0,0,0,0,0,0}
+};
 
-static void usage(const char* message)
-{
-  if (message)
-    fprintf(stderr, "%s: %s\n", argv0, message);
-  fprintf(stderr, usage_str, argv0);
-  exit(1);
-}
+static str msg;
 
 static void log_status(void)
 {
-  if (opt_verbose)
-    printf("journald: status: %d/%d\n", connection_count, opt_connections);
+  if (opt_verbose) {
+    str_copys(&msg, "status: ");
+    str_catu(&msg, connection_count);
+    str_catc(&msg, '/');
+    str_catu(&msg, opt_connections);
+    msg1(msg.s);
+  }
 }
 
 static void close_connection(connection* con)
@@ -92,9 +121,16 @@ static void close_connection(connection* con)
   close(con->fd);
   --connection_count;
   con->fd = 0;
-  if (opt_verbose)
-    printf("journald: end #%lu bytes %ld records %ld %s\n", con->number,
-	   con->total, con->records, con->ok ? "OK" : "Aborted");
+  if (opt_verbose) {
+    str_copys(&msg, "end #");
+    str_catu(&msg, con->number);
+    str_cats(&msg, " bytes: ");
+    str_catu(&msg, con->total);
+    str_cats(&msg, " records: ");
+    str_catu(&msg, con->records);
+    str_cats(&msg, con->ok ? " OK" : " aborted");
+    msg1(msg.s);
+  }
   log_status();
 }
 
@@ -103,13 +139,16 @@ static void open_connection(connection* con, int fd)
   memset(con, 0, sizeof(connection));
   con->fd = fd;
   con->number = connection_number++;
-  if (opt_verbose)
-    printf("journald: start #%lu\n", con->number);
+  if (opt_verbose) {
+    str_copys(&msg, "start #");
+    str_catu(&msg, con->number);
+    msg1(msg.s);
+  }
 }
 
 void die(const char* msg)
 {
-  perror(msg);
+  error2sys(msg, " failed");
   unlink(opt_socket);
   exit(1);
 }
@@ -117,67 +156,37 @@ void die(const char* msg)
 static void use_uid(const char* str)
 {
   char* ptr;
-  if (!str) usage("UID not found in environment.");
+  if (!str) usage(1, "UID not found in environment");
   opt_uid = strtoul(str, &ptr, 10);
-  if (*ptr != 0) usage("Invalid UID number");
+  if (*ptr != 0) usage(1, "Invalid UID number");
 }
 
 static void use_gid(const char* str)
 {
   char* ptr;
-  if (!str) usage("GID not found in environment.");
+  if (!str) usage(1, "GID not found in environment");
   opt_gid = strtoul(str, &ptr, 10);
-  if (*ptr != 0) usage("Invalid GID number");
+  if (*ptr != 0) usage(1, "Invalid GID number");
 }
 
-static void parse_options(int argc, char* argv[])
+static void parse_options(char* argv[])
 {
-  int opt;
   char* ptr;
-  argv0 = argv[0];
-  while((opt = getopt(argc, argv, "qQvc:u:g:Ub:B:m:t:sw:")) != EOF) {
-    switch(opt) {
-    case 't':
-      opt_timeout = strtol(optarg, &ptr, 10);
-      if (*ptr != 0 || opt_timeout >= 1000000) usage("Invalid timeout.");
-      break;
-    case 'q': opt_quiet = 1; opt_verbose = 0; break;
-    case 'Q': opt_quiet = 0; break;
-    case 'v': opt_quiet = 0; opt_verbose = 1; break;
-    case 'd': opt_delete = 0; break;
-    case 'D': opt_delete = 1; break;
-    case 's': opt_synconexit = 1; break;
-    case 'c':
-      opt_connections = strtoul(optarg, &ptr, 10);
-      if (*ptr != 0) usage("Invalid connection limit number.");
-      break;
-    case 'u': use_uid(optarg); break;
-    case 'g': use_gid(optarg); break;
-    case 'U':
-      use_uid(getenv("UID"));
-      use_gid(getenv("GID"));
-      break;
-    case 'm':
-      opt_umask = strtoul(optarg, &ptr, 8);
-      if (*ptr != 0) usage("Invalid mask value.");
-      break;
-    case 'b':
-      opt_backlog = strtoul(optarg, &ptr, 10);
-      if (*ptr != 0) usage("Invalid backlog count.");
-      break;
-    case 'w':
-      opt_writer = optarg;
-      break;
-    default:
-      usage(0);
-    }
+  if (opt_umask_str) {
+    opt_umask = strtoul(opt_umask_str, &ptr, 8);
+    if (*ptr != 0) usage(1, "Invalid umask value");
   }
-  if (!writer_select(opt_writer)) usage("Invalid writer name");
-  argc -= optind;
-  argv += optind;
-  if (argc != 2) usage(0);
+  if (opt_mode_str) {
+    opt_mode = strtoul(opt_mode_str, &ptr, 8);
+    if (*ptr != 0) usage(1, "Invalid mode value");
+  }
+  if (opt_timeout >= 1000000) usage(1, "Timeout is too large");
+  if (opt_envuidgid) {
+    use_gid(getenv("GID"));
+    use_uid(getenv("UID"));
+  }
   opt_socket = argv[0];
-  opt_filename = argv[1];
+  if (!writer_select(opt_writer)) usage(1, "Invalid writer name");
 }
 
 static void nonblock(int fd)
@@ -188,7 +197,7 @@ static void nonblock(int fd)
   if (fcntl(fd, F_SETFL, flags) == -1) die("fcntl");
 }
 
-static int make_socket()
+static int make_socket(void)
 {
   struct sockaddr_un* saddr;
   int s;
@@ -203,6 +212,8 @@ static int make_socket()
   s = socket(AF_UNIX, SOCK_STREAM, 0);
   if (s < 0) die("socket");
   if (bind(s, (struct sockaddr*)saddr, SUN_LEN(saddr)) != 0) die("bind");
+  if (opt_mode_str)
+    if (chmod(opt_socket, opt_mode) != 0) die("chmod");
   if (listen(s, opt_backlog) != 0) die("listen");
   if (opt_gid != (gid_t)-1 && setgid(opt_gid) == -1) die("setgid");
   if (opt_uid != (uid_t)-1 && setuid(opt_uid) == -1) die("setuid");
@@ -256,7 +267,7 @@ static void handle_connection(connection* con)
 static void accept_connection(int s)
 {
   int fd;
-  int i;
+  unsigned i;
   
   do {
     fd = accept(s, NULL, NULL);
@@ -280,7 +291,7 @@ static void do_select(int s)
   static fd_set rfds;
   int fdmax;
   int fd;
-  int i;
+  unsigned i;
   static struct timeval timeout = {0,0};
   static struct timeval sync_time;
   struct timeval* timeptr;
@@ -356,11 +367,13 @@ static void handle_intr()
   exit(0);
 }
 
-int main(int argc, char* argv[])
+int cli_main(int argc, char* argv[])
 {
   int s;
-  parse_options(argc, argv);
-  connections = malloc(sizeof(connection) * opt_connections);
+
+  parse_options(argv);
+  if ((connections = malloc(sizeof(connection) * opt_connections)) == 0)
+    die1(1, "Out of memory");
   signal(SIGINT, handle_intr);
   signal(SIGTERM, handle_intr);
   signal(SIGQUIT, handle_intr);
@@ -368,9 +381,10 @@ int main(int argc, char* argv[])
   signal(SIGPIPE, SIG_IGN);
   signal(SIGALRM, SIG_IGN);
   s = make_socket();
-  if (!open_journal(opt_filename))
-    usage("Could not open the journal file.");
+  if (!open_journal(argv[1]))
+    die3sys(1, "Could not open the journal file '", argv[1], "'");
   log_status();
   for(;;)
     do_select(s);
+  argc = argc;
 }
