@@ -52,6 +52,7 @@ static uid_t opt_uid = -1;
 static gid_t opt_gid = -1;
 static mode_t opt_umask = 0;
 static int opt_backlog = 128;
+static int opt_synconexit = 0;
 
 int opt_twopass = 0;
 unsigned opt_connections = 10;
@@ -70,7 +71,8 @@ static const char* usage_str =
 "  -1           Single-pass transaction commit (default).\n"
 "  -2           Re-write the type flag to commit a transaction.\n"
 "               (slower, but guarantees consistency)\n"
-"  -t N         Pause synchronization by N us. (default 10ms)\n";
+"  -t N         Pause synchronization by N us. (default 10ms)\n"
+"  -s           Sync on exit/interrupt\n";
 
 static void usage(const char* message)
 {
@@ -134,7 +136,7 @@ static void parse_options(int argc, char* argv[])
   int opt;
   char* ptr;
   argv0 = argv[0];
-  while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:t:")) != EOF) {
+  while((opt = getopt(argc, argv, "12qQvc:u:g:Ub:B:m:t:s")) != EOF) {
     switch(opt) {
     case '1': opt_twopass = 0; break;
     case '2': opt_twopass = 1; break;
@@ -147,6 +149,7 @@ static void parse_options(int argc, char* argv[])
     case 'v': opt_quiet = 0; opt_verbose = 1; break;
     case 'd': opt_delete = 0; break;
     case 'D': opt_delete = 1; break;
+    case 's': opt_synconexit = 1; break;
     case 'c':
       opt_connections = strtoul(optarg, &ptr, 10);
       if (*ptr != 0) usage("Invalid connection limit number.");
@@ -345,7 +348,8 @@ static void do_select(int s)
 
 static void handle_intr()
 {
-  rotate_journal();
+  if (opt_synconexit)
+    rotate_journal();
   if (opt_delete)
     unlink(opt_socket);
   exit(0);
