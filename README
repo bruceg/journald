@@ -1,6 +1,7 @@
 journald
-version 0.2
-2000-12-13
+User-space generic journalling daemon
+version 0.3
+2002-09-28
 Bruce Guenter <bruceg@em.ca>
 
 Journald is a user-space standalone generic journalling daemon.  It
@@ -8,13 +9,25 @@ reads records from multiple clients and writes them to a single journal
 in such a way that the client only sees a successful completion only
 after the journal is guaranteed to be written to disk (a transaction).
 
+Development versions of journald are available via anonymous CVS.
+Set your CVSROOT to ":pserver:cvs@bruce-guenter.dyndns.org:/CVS",
+login with an empty password, and check out the "journald" module.
+
+A mailing list has been set up to discuss this and other packages.
+To subscribe, send an email to:
+	bgware-subscribe@lists.em.ca
+A mailing list archive is available at:
+	http://lists.em.ca/?list=bgware
+
 This package is right now in an advanced "alpha" stage.  All of the
 necessary parts are there to use it, but some are limited in their
-capacity.  The file format will change in a future version to accomodate
-block-alligned transactions, but the client-server protocol is not
-expected to change.
+capacity.  The file format is not expected to change in future versions.
 
-This program is Copyright(C) 2000 Bruce Guenter, and may be copied
+Requirements:
+
+- bglibs for building
+
+This program is Copyright(C) 2000,2002 Bruce Guenter, and may be copied
 according to the GNU GENERAL PUBLIC LICENSE (GPL) Version 2 or a later
 version.  A copy of this license is included with this package.  This
 package comes with no warranty of any kind.
