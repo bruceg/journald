@@ -18,7 +18,6 @@ extern void setup_env(int, const char*);
 #endif
 
 static const char* argv0;
-static char** command_argv;
 
 static unsigned connection_count = 0;
 
@@ -27,6 +26,7 @@ static unsigned opt_verbose = 0;
 static unsigned opt_delete = 1;
 static unsigned opt_connections = 10;
 static const char* opt_socket;
+static const char* opt_journal;
 static uid_t opt_uid = -1;
 static gid_t opt_gid = -1;
 static mode_t opt_umask = 0;
@@ -133,10 +133,10 @@ void parse_options(int argc, char* argv[])
   }
   argc -= optind;
   argv += optind;
-  if(argc < 2)
+  if(argc != 2)
     usage(0);
   opt_socket = argv[0];
-  command_argv = argv + 1;
+  opt_journal = argv[1];
 }
 
 int make_socket()
@@ -168,11 +168,20 @@ void handle_connection(connection* con)
 {
   char buf[4096];
   long rd;
-  while((rd = read(con->fd, buf, sizeof buf)) != 0) {
-    if(rd == -1)
+  while (con->state != -1) {
+    rd = read(con->fd, buf, sizeof buf);
+    if (!rd) {
+      handle_data(con, 0, 0);
+      break;
+    }
+    if (rd == -1)
       die("read");
     handle_data(con, buf, rd);
   }
+  if (sync_records()) con->ok = 0;
+  buf[0] = con->ok;
+  if(write(con->fd, buf, 1) != 1)
+    die("write");
 }
 
 void accept_connection(int s)
@@ -222,6 +231,7 @@ int main(int argc, char* argv[])
   signal(SIGHUP, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
   signal(SIGALRM, SIG_IGN);
+  if (open_journal(opt_journal) == -1) return 1;
   s = make_socket();
   log_status();
   for(;;) {
