@@ -129,8 +129,8 @@ static void read_journal(const char* filename)
   if (read(in, header, sizeof header) != sizeof header)
     FAIL("Could not read header from '%s'");
   if (memcmp(header, "journald", 8)) FAIL("'%s' is not a journald file");
-  if (bytes2ulong(header+8) != 1)
-    FAIL("'%s' is not a version 1 journald file");
+  if (bytes2ulong(header+8) != 0)
+    FAIL("'%s' is not a version 0 journald file");
   printf("File:%s\n", filename);
   while (read_record(in))
     ;

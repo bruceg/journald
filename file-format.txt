@@ -13,7 +13,7 @@
 
 File Header Format:
 - Constant string (8 bytes): "journald"
-- Version (1)
+- Version (0)
 - File number (starts at zero)
 
 Record Format:
