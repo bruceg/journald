@@ -11,13 +11,16 @@
 
 - Data from multiple records may be concatenated into one transaction.
 
-- Check code is 64-bit CRC (8 bytes)
-  - Polynomial is x64 + x4 + x3 + x1 + 1.
+- Check code is 64-bit CRC (8 bytes); polynomial is x64 + x4 + x3 + x1 + 1.
+  It used to be MD4, but CRC is designed specifically to detect changed data,
+  whereas a cryptographic hash is merely highly probable to detect changed
+  data.
 
 File Header Format:
 - Constant string (8 bytes): "journald"
 - Version (2)
 - Page size (maximum of OS page size and FS block size)
+- First global record number
 - Option bytes
 - Option data (variable size)
 - Check code
@@ -41,8 +44,9 @@ Record Format:
   "O": first and last record (once) for the given stream
   "E": end of the records for the given stream
   "A": abort record
+- Global record number
 - Stream number
-- Record number
+- Local (per-stream) record number
 - Record data length
 - Record data
 - Check code on all the data from the record type flag to the last byte
@@ -84,3 +88,4 @@ Stream Information Data Format:
 - The following "magic" entries can be used to identify journald files:
 0	string		journald	Journald file
 >8	belong		x		version %d
+>12	belong		x		page size %d
