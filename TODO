@@ -31,9 +31,6 @@
 
 - Make man pages and usage documentation for the various components.
 
-- Modify journald to delay transactions only if there are more than one
-  connections opened.
-
 - Expand on the design decision documentation.
 
 - Modify journal-read to mark the start and end of files, and print

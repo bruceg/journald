@@ -5,13 +5,19 @@ Changes in version 0.3
   for raw devices).  Wraparound is handled by first sync'ing all
   filesystems.
 
-- Modified the journal writing mechanism to use msync instead of
-  write+fdatasync.
+- Introduced three journal writing mechanisms, fdatasync, open+sync, and
+  mmap+msync.
+
+- Modified file format to introduce a "page size" on which all writes
+  are alligned, and switched from MD4 to 64-bit CRC.
+
+- journald now only delays to commit if there are no other open
+  connections.
 
 Development of this version has been sponsored by FutureQuest, Inc.
 OSSI@FutureQuest.net  http://www.FutureQuest.net/
 -------------------------------------------------------------------------------
-Changes in version 0.2
+Changes in version 0.2 (unreleased)
 
 New Features:
 - journal-read now spawns seperate processes to handle each

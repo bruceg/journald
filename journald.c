@@ -240,7 +240,10 @@ static void handle_connection(connection* con)
     handle_data(con, buf, rd);
   if(con->state == -1) {
     if (con->ok)
-      needs_sync = 1;
+      if (connection_count == 1)
+	do_sync();
+      else
+	needs_sync = 1;
     else
       close_connection(con);
   }
