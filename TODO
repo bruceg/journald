@@ -1,9 +1,3 @@
-! Rewrite stdio code to use iobuf!
-! Use str lib etc!
-
-- Benchmark which journald really works fastest, if there's any difference.
-  - fdatasync seems fastest, then mmap, then open-sync
-
 - Fix reader and writer to handle option flags.
 
 - Rewrite file format documentation in HTML.
