@@ -13,7 +13,7 @@
 
 File Header Format:
 - Constant string (8 bytes): "journald"
-- Version (0)
+- Version (1)
 - File number (starts at zero)
 
 Record Format:
@@ -68,4 +68,3 @@ Record Format:
 0	string		journald	Journald file
 >8	belong		x		version %d
 >12	belong		x		(file #%ld)
->17	belong		x		(rec# %ld)

@@ -26,7 +26,7 @@
 #include "journald_server.h"
 
 static int fdout = 0;
-static char header[16] = "journald" "\0\0\0\0" "\0\0\0\0";
+static char header[16] = "journald" "\0\0\0\1" "\0\0\0\0";
 static unsigned long file_nr = 0;
 
 static char saved_type = 0;
