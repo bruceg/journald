@@ -15,90 +15,132 @@
   - Close connection
 */
 
-static int read_ident_length(connection* con, char byte)
+static unsigned long read_ident_length(connection* con,
+				       unsigned char* bytes,
+				       unsigned long size)
 {
-  con->ident_len <<= 8;
-  con->ident_len |= (unsigned char)byte;
-  con->count++;
-  if (con->count == 4) {
-    con->count = 0;
-    return 1;
+  unsigned long used;
+  used = 0;
+  while (size) {
+    con->ident_len <<= 8;
+    con->ident_len |= *bytes;
+    con->count++;
+    used++;
+    bytes++;
+    size--;
+    if (con->count == 4) {
+      con->count = 0;
+      con->state = 1;
+      break;
+    }
   }
-  else
-    return 0;
+  return used;
 }
 
-static int read_ident(connection* con, char byte)
+static unsigned long read_ident(connection* con,
+				unsigned char* bytes,
+				unsigned long size)
 {
-  con->ident[con->count++] = byte;
+  unsigned long used;
+
+  used = con->ident_len - con->count;
+  if (used > size) used = size;
+  memcpy(con->ident+con->count, bytes, used);
+  con->count += used;
   if (con->count == con->ident_len) {
     con->count = 0;
     con->length = 0;
-    return 2;
+    con->state = 2;
   }
-  else
-    return 1;
+  return used;
 }
 
-static int read_record_length(connection* con, char byte)
+static unsigned long read_record_length(connection* con,
+					unsigned char* bytes,
+					unsigned long size)
 {
-  con->length <<= 8;
-  con->length |= (unsigned char)byte;
-  con->count++;
-  if (con->count == 4) {
-    if (con->length) {
+  unsigned long used;
+  used = 0;
+  while (size) {
+    con->length <<= 8;
+    con->length |= *bytes;
+    con->count++;
+    used++;
+    bytes++;
+    size--;
+    if (con->count == 4) {
+      if (con->length) {
+	con->count = 0;
+	con->state = 3;
+      }
+      else {
+	con->ok = write_record(con, 1, 0);
+	con->state = -1;
+      }
+      break;
+    }
+  }
+  return used;
+}
+
+static unsigned long read_record(connection* con,
+				 unsigned char* bytes,
+				 unsigned long size)
+{
+  unsigned long used;
+  unsigned long use;
+  used = 0;
+  while (size) {
+    use = con->length - con->count;
+    if (use > CBUFSIZE - con->buf_length) use = CBUFSIZE - con->buf_length;
+    if (use > size) use = size;
+    memcpy(con->buf + con->buf_length, bytes, use);
+    bytes += use;
+    size -= use;
+    used += use;
+    con->buf_length += use;
+    con->count += use;
+    if (con->buf_length == CBUFSIZE) {
+      if (!write_record(con, 0, 0)) {
+	con->state = -1;
+	break;
+      }
+    }
+    if (con->count == con->length) {
       con->count = 0;
-      return 3;
-    }
-    else {
-      con->ok = write_record(con, 1, 0);
-      return -1;
+      con->length = 0;
+      con->state = 2;
+      break;
     }
   }
-  else
-    return 2;
-}
-
-static int read_record(connection* con, char byte)
-{
-  con->buf[con->buf_length++] = byte;
-  con->count++;
-  if (con->buf_length == CBUFSIZE) {
-    if (!write_record(con, 0, 0))
-      return -1;
-  }
-  if (con->count == con->length) {
-    con->count = 0;
-    con->length = 0;
-    return 2;
-  }
-  return 3;
+  return used;
 }
 
 void handle_data(connection* con, char* data, unsigned long size)
 {
-  int state;
+  unsigned long used;
   if (!size) {
     write_record(con, 0, 1);
   }
   else {
-    for (state = con->state; size > 0; ++data, --size) {
+    while (size && con->state != -1) {
 #ifdef DEBUG
-      printf("state=%d byte=%d(%c) length=%ld buf_length=%ld count=%d ",
-	     state, *data, *data, con->length, con->buf_length, con->count);
+      printf("state=%d byte=%d length=%ld buf_length=%ld count=%d ",
+	     con->state, *data, con->length, con->buf_length, con->count);
 #endif
-      switch (state) {
-      case 0: state = read_ident_length(con, *data); break;
-      case 1: state = read_ident(con, *data); break;
-      case 2: state = read_record_length(con, *data); break;
-      case 3: state = read_record(con, *data); break;
+      switch (con->state) {
+      case 0: used = read_ident_length(con, data, size); break;
+      case 1: used = read_ident(con, data, size); break;
+      case 2: used = read_record_length(con, data, size); break;
+      case 3: used = read_record(con, data, size); break;
       default: die("Invalid state in handle_data");
       }
+      size -= used;
+      data += used;
 #ifdef DEBUG
-      printf("next=%d\n", state);
+      printf("used=%ld next=%d\n", used, con->state);
 #endif
     }
-    con->state = state;
 #ifdef DEBUG
     fflush(stdout);
 #endif
