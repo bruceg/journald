@@ -1,4 +1,4 @@
-/* journal_input.c - State machine for handling client input data.
+/* socketio.c - State machine for handling client input data.
    Copyright (C) 2000,2002 Bruce Guenter
 
    This program is free software; you can redistribute it and/or modify

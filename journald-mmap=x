@@ -1,5 +1,5 @@
 journald.o
-journal_input.o
+socketio.o
 writer.o
 writer-mmap.o
 crc64.o
