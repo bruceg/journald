@@ -29,11 +29,13 @@
 #include "journald_server.h"
 #include "writer.h"
 
-#define HEADER_SIZE (1+4+4+4)
+#define HEADER_SIZE (1+4+4+4+4)
 
 // static unsigned char saved_type = 0;
 // static unsigned long saved_pos;
 static unsigned long pageoff;
+
+static unsigned long global_recnum = 0;
 
 #define RECORD_EOJ    0
 #define RECORD_INFO  'I'
@@ -84,9 +86,10 @@ static int write_record_raw(char type,
   hash_init(&hash);
   /* hash/write the header */
   header[0] = type;
-  ulong2bytes(stream, header+1);
-  ulong2bytes(record, header+5);
-  ulong2bytes(buflen, header+9);
+  ulong2bytes(global_recnum, header+1);
+  ulong2bytes(stream, header+5);
+  ulong2bytes(record, header+9);
+  ulong2bytes(buflen, header+13);
   hash_update(&hash, header, HEADER_SIZE);
 #if 0
   // FIXME: twopass
@@ -106,6 +109,7 @@ static int write_record_raw(char type,
   hash_finish(&hash, hashbuf);
   if (!writer_write(hashbuf, HASH_SIZE)) return 0;
 
+  global_recnum++;
   return 1;
 }
 
@@ -114,7 +118,8 @@ static int write_ident(connection* con)
   static char buf[4+IDENTSIZE];
   ulong2bytes(con->total, buf);
   memcpy(buf+4, con->ident, con->ident_len);
-  return write_record_raw(RECORD_INFO, con->number, 0, con->ident_len+4, buf);
+  return write_record_raw(RECORD_INFO, con->number, con->records,
+			  con->ident_len+4, buf);
 }
 
 static int sync_journal(void)
@@ -133,20 +138,6 @@ static int sync_journal(void)
   return 1;
 }
 
-int rotate_journal(void)
-{
-  unsigned i;
-
-  if (!sync_records()) return 0;
-  sync();
-  if (!writer_seek(writer_pagesize)) return 0;
-  if (!sync_journal()) return 0;
-  
-  for (i = 0; i < opt_connections; i++)
-    connections[i].wrote_ident = 0;
-  return 1;
-}
-
 static void make_file_header(void)
 {
   unsigned char* p = writer_pagebuf;
@@ -155,13 +146,29 @@ static void make_file_header(void)
   memcpy(p, "journald", 8); p += 8;
   p = ulong2bytes(2, p);
   p = ulong2bytes(writer_pagesize, p);
-  // FIXME: fill in real option flags
+  p = ulong2bytes(global_recnum, p);
+  // FIXME: fill in real option flags, including concurrency
   p = ulong2bytes(0, p);
   *p++ = 0;
   hash_init(&hash);
   hash_update(&hash, writer_pagebuf, p - writer_pagebuf);
   hash_finish(&hash, p); p += HASH_SIZE;
   pageoff = p - writer_pagebuf;
+}
+
+int rotate_journal(void)
+{
+  unsigned i;
+
+  if (!sync_records()) return 0;
+  sync();
+  if (!writer_seek(0)) return 0;
+  make_file_header();
+  if (!sync_journal()) return 0;
+  
+  for (i = 0; i < opt_connections; i++)
+    connections[i].wrote_ident = 0;
+  return 1;
 }
 
 int open_journal(const char* filename)
