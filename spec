@@ -22,15 +22,20 @@ after the journal is guaranteed to be written to disk.
 make CFLAGS="$RPM_OPT_FLAGS" all
 
 %install
-rm -fr $RPM_BUILD_ROOT
-make install_prefix=$RPM_BUILD_ROOT \
-	bindir=%{_bindir} libdir=%{_libdir} mandir=%{_mandir} install
+rm -fr %{buildroot}
+#make install_prefix=%{buildroot} bindir=%{_bindir} mandir=%{_mandir} install
+rm -f conf_bin.c insthier.o installer instcheck
+echo %{buildroot}%{_bindir} >conf-bin
+make installer instcheck
+
+mkdir -p %{buildroot}%{_bindir}
+./installer
+./instcheck
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root)
-%doc COPYING NEWS README TODO
+%doc COPYING NEWS README TODO *.txt
 %{_bindir}/*
-%{_libdir}/*
