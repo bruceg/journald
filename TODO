@@ -1,5 +1,3 @@
-- Restore operation of two-pass mode.
-
 - Set up a conf-writer switch to build a single journald binary from the
   three possibilities.
 
@@ -15,8 +13,6 @@
 ? Modify the file format to add timestamp to records?
 
 - Clean up the file format and documentation.
-
-- Modify journal-read to verify that the value of recnum is sequential.
 
 - Make man pages and usage documentation for the various components.
 
