@@ -25,9 +25,10 @@ Record Format:
   E == end of the records for the given ID
   C == continued data for the given ID
   A == abort record
-- Record ID
+- Record ID length
 - Record data length
-- "length" bytes of record data
+- Record ID
+- Record data
 - A 32-bit CRC on all the data from the non-zero value of the record
   type flag to the last byte of the record data.
 
@@ -43,10 +44,10 @@ Record Format:
   A
   S C* A
 
-- All strings are terminated by a NUL.
+- Unless otherwise noted, all the above numbers are represented as a
+  4-byte binary value, MSB first.
 
-- Unless otherwise noted, all the above are numbers represented as an
-  ASCII decimal string.
+- All strings are prefixed with their length
 
 - Record IDs are a string supplied by the client.
 

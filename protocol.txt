@@ -1,20 +1,13 @@
 Socket protocol:
 
-- Client sends a nul-terminated non-zero length record ID string.
-- Fixed mode:
-  - Client sends a single non-zero-length string.
-- Variable mode:
-  - Client sends a zero-length string.
-  - Client sends a series of non-zero-length strings.
-  - Client sends a zero-length string.
+- Client sends a non-zero length record ID string.
+- Client sends a series of non-zero-length strings.
+- Client sends a zero-length string.
 - Server sends an acknowledgement code and closes the socket.
 
 Notes:
 
-- Fixed mode produces a single "O" record, and is more efficient if
-  the data size is known in advance.
-
-- All numbers are represented as ASCII decimals followed by a NUL byte.
+- All numbers are represented as 4-byte binary MSB first.
 
 - A "string" above is represented as a length number followed
   immediately by that many bytes of data.
