@@ -1,6 +1,6 @@
 journald
 version 0.1
-2000-12-11
+2000-12-12
 Bruce Guenter <bruceg@em.ca>
 
 Journald is a user-space standalone generic journalling daemon.  It

@@ -8,7 +8,20 @@ LD = $(CC)
 LDFLAGS = $(CFLAGS)
 LIBS =
 
-all: journald journal_read testclient
+install_prefix =
+prefix = /usr/local
+bindir = $(prefix)/bin
+mandir = $(prefix)/man
+man1dir = $(mandir)/man1
+
+install = install
+installbin = $(install) -m 555
+installdir = $(install) -d
+installsrc = $(install) -m 444
+
+PROGS = journald journal_read # testclient
+
+all: $(PROGS)
 
 journald: journald.o journal_input.o journal_output.o md4.o
 	$(LD) $(LDFLAGS) journald.o journal_input.o journal_output.o md4.o \
@@ -20,9 +33,15 @@ journal_read: journal_read.o md4.o
 testclient: testclient.o journald_client.o
 	$(LD) $(LDFLAGS) testclient.o journald_client.o -o $@ $(LIBS)
 
-journald.o: journald.c journald.h
-journal_input.o: journal_input.c journald.h
-journal_output.o: journal_output.c journald.h md4.h
+install: all
+	$(installdir) $(install_prefix)$(bindir)
+	$(installbin) $(PROGS) $(install_prefix)$(bindir)
+
+journald.o: journald.c journald_server.h
+journal_input.o: journal_input.c journald_server.h
+journal_output.o: journal_output.c journald_server.h hash.h
 journald_client.o: journald_client.c journald_client.h
+journal_read.o: journal_read.c journald_server.h hash.h
 testclient.o: testclient.c journald_client.h
 md4.o: md4.c md4.h
+
